@@ -1,8 +1,19 @@
 import zlib_inflate from './zlib/inflate';
 import c            from './zlib/constants';
-import msg          from './zlib/messages';
 import ZStream      from './zlib/zstream';
 import GZheader     from './zlib/gzheader';
+
+const msg = {
+  2:      'need dictionary',     /* Z_NEED_DICT       2  */
+  1:      'stream end',          /* Z_STREAM_END      1  */
+  0:      '',                    /* Z_OK              0  */
+  '-1':   'file error',          /* Z_ERRNO         (-1) */
+  '-2':   'stream error',        /* Z_STREAM_ERROR  (-2) */
+  '-3':   'data error',          /* Z_DATA_ERROR    (-3) */
+  '-4':   'insufficient memory', /* Z_MEM_ERROR     (-4) */
+  '-5':   'buffer error',        /* Z_BUF_ERROR     (-5) */
+  '-6':   'incompatible version' /* Z_VERSION_ERROR (-6) */
+} as { [key: number]: string };
 
 const chunkSize = 16384;
 
@@ -10,7 +21,7 @@ export default function * inflate(buffer: Uint8Array) {
   const strm   = new ZStream();
   strm.avail_out = 0;
 
-  let status  = zlib_inflate.inflateInit2(strm, 47);
+  let status  = zlib_inflate.inflateInit(strm, 47);
 
   if (status !== c.Z_OK) {
     throw new Error(msg[status]);
@@ -19,8 +30,6 @@ export default function * inflate(buffer: Uint8Array) {
   const header = new GZheader();
 
   zlib_inflate.inflateGetHeader(strm, header);
-
-  let next_out_utf8, tail, utf8str;
 
   // Flag to properly process Z_BUF_ERROR on testing inflate call
   // when we check that all output data was flushed.

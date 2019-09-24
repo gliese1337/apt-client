@@ -152,16 +152,8 @@ var    SYNC = 32;      /* looking for synchronization bytes to restart inflate()
 
 /* ===========================================================================*/
 
-
-
 var ENOUGH_LENS = 852;
 var ENOUGH_DISTS = 592;
-//var ENOUGH =  (ENOUGH_LENS+ENOUGH_DISTS);
-
-var MAX_WBITS = 15;
-/* 32K LZ77 window */
-var DEF_WBITS = MAX_WBITS;
-
 
 function zswap32(q) {
   return  (((q >>> 24) & 0xff) +
@@ -302,7 +294,7 @@ function inflateReset2(strm, windowBits) {
   return inflateReset(strm);
 }
 
-function inflateInit2(strm, windowBits) {
+function inflateInit(strm, windowBits) {
   var ret;
   var state;
 
@@ -320,10 +312,6 @@ function inflateInit2(strm, windowBits) {
     strm.state = null/*Z_NULL*/;
   }
   return ret;
-}
-
-function inflateInit(strm) {
-  return inflateInit2(strm, DEF_WBITS);
 }
 
 
@@ -1523,20 +1511,6 @@ function inflate(strm, flush) {
   return ret;
 }
 
-function inflateEnd(strm) {
-
-  if (!strm || !strm.state /*|| strm->zfree == (free_func)0*/) {
-    return Z_STREAM_ERROR;
-  }
-
-  var state = strm.state;
-  if (state.window) {
-    state.window = null;
-  }
-  strm.state = null;
-  return Z_OK;
-}
-
 function inflateGetHeader(strm, head) {
   var state;
 
@@ -1551,61 +1525,8 @@ function inflateGetHeader(strm, head) {
   return Z_OK;
 }
 
-function inflateSetDictionary(strm, dictionary) {
-  var dictLength = dictionary.length;
-
-  var state;
-  var dictid;
-  var ret;
-
-  /* check state */
-  if (!strm /* == Z_NULL */ || !strm.state /* == Z_NULL */) { return Z_STREAM_ERROR; }
-  state = strm.state;
-
-  if (state.wrap !== 0 && state.mode !== DICT) {
-    return Z_STREAM_ERROR;
-  }
-
-  /* check for correct dictionary identifier */
-  if (state.mode === DICT) {
-    dictid = 1; /* adler32(0, null, 0)*/
-    /* dictid = adler32(dictid, dictionary, dictLength); */
-    dictid = adler32(dictid, dictionary, dictLength, 0);
-    if (dictid !== state.check) {
-      return Z_DATA_ERROR;
-    }
-  }
-  /* copy dictionary to window using updatewindow(), which will amend the
-   existing dictionary if appropriate */
-  ret = updatewindow(strm, dictionary, dictLength, dictLength);
-  if (ret) {
-    state.mode = MEM;
-    return Z_MEM_ERROR;
-  }
-  state.havedict = 1;
-  // Tracev((stderr, "inflate:   dictionary set\n"));
-  return Z_OK;
-}
-
 export default {
-  inflateReset,
-  inflateReset2,
-  inflateResetKeep,
   inflateInit,
-  inflateInit2,
   inflate,
-  inflateEnd,
   inflateGetHeader,
-  inflateSetDictionary,
-  inflateInfo: 'pako inflate (from Nodeca project)',
 }
-
-/* Not implemented
-exports.inflateCopy = inflateCopy;
-exports.inflateGetDictionary = inflateGetDictionary;
-exports.inflateMark = inflateMark;
-exports.inflatePrime = inflatePrime;
-exports.inflateSync = inflateSync;
-exports.inflateSyncPoint = inflateSyncPoint;
-exports.inflateUndermine = inflateUndermine;
-*/
