@@ -17,8 +17,16 @@
     "aptitude",
     "repository"
   ],
-  "author": "VivintSolar",
+  "author": "Logan R. Kearsley",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gliese1337/apt-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gliese1337/apt-client/issues"
+  },
+  "homepage": "https://github.com/gliese1337/apt-client#readme",
   "dependencies": {
     "fetch-ponyfill": "^6.1.0"
   },

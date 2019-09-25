@@ -5,21 +5,62 @@ export { PkgInfo, PkgSpec };
 export class AptClient {
   private bin_pkgs = new Map<string, [BinPkgInfo, ArrayBuffer | null]>();
   private src_pkgs = new Map<string, [SrcPkgInfo, { [key: string]: ArrayBuffer } | null]>();
+  private lastUpdated = new Map<string, [number, PkgInfo[]]>();
+  private updatePromise: Promise<void[]> | null = null;
 
-  constructor(private arch: string, private sources: string[] = []) { }
+  constructor(private sources: string[] = [], private arch: string = 'all', private cachetime = -Infinity) { }
 
-  public async update(sources = this.sources) {
-    const { bin_pkgs, src_pkgs, arch } = this;
-    bin_pkgs.clear();
-    src_pkgs.clear();
-    await Promise.all(sources.map(async s => {
-      for (const pkg of await readAptSource(s, arch)) {
-        (pkg.type === 'bin' ? bin_pkgs : src_pkgs).set(pkg.Package, [ pkg as any, null ]);
-      }
-    }));
+  public async update(
+    sources = this.sources,
+    arch = this.arch,
+    cachetime = this.cachetime,
+    clear = true,
+  ) {
+    if (this.updatePromise) {
+      // wait for previously-started update process to conclude.
+      await this.updatePromise;
+    }
+
+    const { bin_pkgs, src_pkgs, lastUpdated } = this;
+    if (clear) {
+      bin_pkgs.clear();
+      src_pkgs.clear();
+    }
+
+    // Set the updatePromise so concurrent calls will know to wait.
+    this.updatePromise = Promise.resolve().then(() => {
+      const now = Date.now();
+
+      const updateSrc = isFinite(cachetime) && cachetime > 0 ? async s => {
+        const lu = lastUpdated.get(s);
+        let pkgs: PkgInfo[];
+        if (lu && (now - lu[0] < cachetime)) {
+          if (!clear) return;
+          pkgs = lu[1];
+        } else {
+          pkgs = await readAptSource(s, arch);
+          lastUpdated.set(s, [now, pkgs]);
+        }
+        for (const pkg of pkgs) {
+          (pkg.type === 'bin' ? bin_pkgs : src_pkgs).set(pkg.Package, [ pkg as any, null ]);
+        }
+      } : async s => {
+        const pkgs = await readAptSource(s, arch);
+        lastUpdated.set(s, [now, pkgs]);
+        for (const pkg of pkgs) {
+          (pkg.type === 'bin' ? bin_pkgs : src_pkgs).set(pkg.Package, [ pkg as any, null ]);
+        }
+      };
+
+      return Promise.all(sources.map(updateSrc));
+    });
+
+    await this.updatePromise;
+    // Clear the updatePromise so later calls don't wait unnecessarily.
+    this.updatePromise = null;
   }
 
-  public async getPkgInfo(pkgNames: string[]) {
+  public async getPkgInfo(pkgNames: Iterable<string>) {
     const bin_info: Map<string, BinPkgInfo> = new Map();
     const src_info: Map<string, SrcPkgInfo> = new Map();
     const { bin_pkgs, src_pkgs } = this;
@@ -41,7 +82,7 @@ export class AptClient {
     return { bin: bin_info, src: src_info };
   }
 
-  public async getBinFiles(pkgNames: string[]) {
+  public async getBinFiles(pkgNames: Iterable<string>) {
     const files: Map<string, ArrayBuffer> = new Map();
     const { bin_pkgs } = this;
 
@@ -60,7 +101,7 @@ export class AptClient {
     return files;
   }
 
-  public async getSrcFiles(pkgNames: string[]) {
+  public async getSrcFiles(pkgNames: Iterable<string>) {
     const files: Map<string, { [key: string]: ArrayBuffer }> = new Map();
     const { src_pkgs } = this;
 
@@ -93,7 +134,7 @@ export class AptClient {
     const { bin_pkgs, src_pkgs } = this;
     for (const [name, version] of packages) {
       const data = bin_pkgs.get(name) || src_pkgs.get(name);
-      yield (!data) || (version_cmp(data[0].Version, version) < 1);
+      yield [name, (!data) || (version_cmp(data[0].Version, version) < 1)];
     }
   }
 
