@@ -235,14 +235,14 @@ function buf2string(buf: Uint8Array, len: number) {
   return result;
 }
 
-function * iterRecords(gz: Uint8Array) {
+function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]|null> {
   const asciibuf = new Uint8Array(2 * 16384);
 
   let field = '';
 
   let state = 0;
   let out = 0;
-  for (const buf of inflate(gz)) {
+  for (const buf of chunks) {
     const len = buf.length;
 
     if (state === 3) {
@@ -307,10 +307,10 @@ function * iterRecords(gz: Uint8Array) {
   if (field) yield [field, buf2string(asciibuf, out)];
 }
 
-function parseIndex(buffer: Uint8Array, base: string, type: string, pkgs: PkgInfo[]): void {
+function parseIndex(chunks: Iterable<Uint8Array>, base: string, type: string, pkgs: PkgInfo[]): void {
   let pkg = { RepoBase: base, type } as PkgInfo;
 
-  for (const r of iterRecords(buffer)) {
+  for (const r of iterRecords(chunks)) {
     if (r === null) {
       if (pkg.Package) pkgs.push(pkg);
       pkg = { RepoBase: base, type } as PkgInfo;
@@ -332,10 +332,19 @@ export async function readAptSource(spec: string, arch = 'all') {
 
   const pkgs: PkgInfo[] = [];
   const ps = components.map(async(set) => {
-    const url = `${ base }/dists/${ dist }/${ set }/${ dir }/${ fname }.gz`;
-    const res = await fetch(url);
-    if (res.status !== 200) return;
-    parseIndex(new Uint8Array(await res.arrayBuffer()), base, t, pkgs);
+    const url = `${ base }/dists/${ dist }/${ set }/${ dir }/${ fname }`;
+    let chunks: Iterable<Uint8Array>;
+
+    let res = await fetch(url);
+    if (res.status === 200) {
+      chunks = [new Uint8Array(await res.arrayBuffer())];
+    } else {
+      res = await fetch(url+'.gz');
+      if (res.status !== 200) return;
+      chunks = inflate(new Uint8Array(await res.arrayBuffer()));
+    }
+
+    parseIndex(chunks, base, t, pkgs);
   });
 
   await Promise.all(ps);

@@ -17,7 +17,7 @@ const msg = {
 
 const chunkSize = 16384;
 
-export default function * inflate(buffer: Uint8Array) {
+export default function * inflate(buffer: Uint8Array): Generator<Uint8Array> {
   const strm   = new ZStream();
   strm.avail_out = 0;
 
