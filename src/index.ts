@@ -89,5 +89,25 @@ export class AptClient {
     return version_cmp(data[0].Version, version) < 1;
   }
 
+  public * areLatest(packages: Iterable<[string, string]>) {
+    const { bin_pkgs, src_pkgs } = this;
+    for (const [name, version] of packages) {
+      const data = bin_pkgs.get(name) || src_pkgs.get(name);
+      yield (!data) || (version_cmp(data[0].Version, version) < 1);
+    }
+  }
+
+  public areAllLatest(packages: Iterable<[string, string]>) {
+    const { bin_pkgs, src_pkgs } = this;
+    for (const [name, version] of packages) {
+      const data = bin_pkgs.get(name) || src_pkgs.get(name);
+      if (data && version_cmp(data[0].Version, version) > 0) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   public static cmpVersions = version_cmp;
 }

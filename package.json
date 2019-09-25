@@ -23,10 +23,8 @@
     "fetch-ponyfill": "^6.1.0"
   },
   "devDependencies": {
-    "@types/node": "^12.7.5",
     "chai": "^4.2.0",
     "mocha": "^6.2.0",
-    "nock": "^11.3.4",
     "typescript": "^3.6.2"
   }
 }
