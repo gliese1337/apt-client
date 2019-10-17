@@ -3,12 +3,6 @@ import inflate from './inflate';
 
 const { fetch } = fp();
 
-export type PkgSpec = {
-  name: string;
-  rel: '<'|'>'|'<='|'>='|'='|'any';
-  version: string;
-};
-
 export type FileSpec = {
   hash: string;
   size: number;
@@ -20,7 +14,7 @@ export type ContactInfo = {
   email: string;
 };
 
-type BasePkgInfo = {
+export type BasePkgInfo = {
   Package: string;
   RepoBase: string;
   Version: string;
@@ -40,7 +34,7 @@ type BasePkgInfo = {
 
 export type SrcPkgInfo = BasePkgInfo & {
   type: 'src';
-  Source: string;
+
   Binary: string[];
   Format: string;
   Directory: string;
@@ -121,7 +115,7 @@ export type BinPkgInfo = BasePkgInfo & {
   Essential?: 'yes;'
 };
 
-export type PkgInfo = SrcPkgInfo | BinPkgInfo;
+export type PkgVersionInfo = SrcPkgInfo | BinPkgInfo;
 
 function * matchAll(regexp: RegExp, str: string) {
   let match;
@@ -131,8 +125,17 @@ function * matchAll(regexp: RegExp, str: string) {
 }
 
 function toContactInfo(s: string): ContactInfo {
-  const [ , name, email ] = s.match(/(.*)?<(.*?)>/) as string[];
-  return { name: name.trim() , email: email.trim() };
+  let match = s.match(/(.*)?<(.*?)>/);
+  if (match) {
+    const [ , name, email ] = s.match(/(.*)?<(.*?)>/) as string[];
+    return { name: name.replace(/"|^\s+|\s+$/g, '') , email: email.trim() };
+  }
+
+  if(/^\s*\S+@\S+\s*$/.test(s)){
+    return { name: '', email: s.trim() };
+  }
+
+  return { name: s.replace(/"|^\s+|\s+$/g, ''), email: '' };
 }
 
 function multiContactInfo(x: string): ContactInfo[] {
@@ -142,13 +145,17 @@ function multiContactInfo(x: string): ContactInfo[] {
   let start = 0;
   for (let i = 0; i < l; i++) {
     if (x[i] === '"') quoted = !quoted;
-    if (x[i] == '>' && !quoted) {
+    if (x[i] == ',' && !quoted) {
       contacts.push(
-        toContactInfo(x.substring(start, i + 1).replace(/^\s*,\s*/,''))
+        toContactInfo(x.substring(start, i).replace(/^\s*,\s*/,''))
       );
       start = i + 1;
     }
   }
+
+  const rest = x.substring(start);
+  if (!/^\s+$/.test(rest)) contacts.push(toContactInfo(rest));
+
   return contacts;
 }
 
@@ -172,6 +179,10 @@ function commas(s: string): string[] {
   return s.split(/\s*,\s*/g).map(x => x.trim()).filter(x => x);
 }
 
+function multiline(s: string) : string {
+  return s.replace(/^\s*\.\s*$/gm, '');
+}
+
 function id(s: string) {
   return s;
 }
@@ -189,7 +200,7 @@ const pkgInfoValueParsers = {
   Directory: id,
 
   Architecture: splitspace,
-  Description: id,
+  Description: multiline,
   Filename: id,
 
   Maintainer: toContactInfo,
@@ -221,7 +232,7 @@ const pkgInfoValueParsers = {
   Conflicts: commas,
   RubyVersions: splitspace,
   LuaVersions: splitspace,
-} as unknown as { [key in keyof PkgInfo]: (x: string) => PkgInfo[key] };
+} as unknown as { [key in keyof PkgVersionInfo]: (x: string) => PkgVersionInfo[key] };
 
 function buf2string(buf: Uint8Array, len: number) {
   let result = '';
@@ -307,15 +318,20 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
   if (field) yield [field, buf2string(asciibuf, out)];
 }
 
-function parseIndex(chunks: Iterable<Uint8Array>, base: string, type: string, pkgs: PkgInfo[]): void {
-  let pkg = { RepoBase: base, type } as PkgInfo;
+function parseIndex(
+  chunks: Iterable<Uint8Array>,
+  base: string,
+  type: string,
+  pkgs: PkgVersionInfo[],
+): void {
+  let pkg = { RepoBase: base, type } as PkgVersionInfo;
 
   for (const r of iterRecords(chunks)) {
     if (r === null) {
       if (pkg.Package) pkgs.push(pkg);
-      pkg = { RepoBase: base, type } as PkgInfo;
+      pkg = { RepoBase: base, type } as PkgVersionInfo;
     } else {
-      const key = r[0] as keyof PkgInfo;
+      const key = r[0] as keyof PkgVersionInfo;
       const parser = pkgInfoValueParsers[key];
       if (parser) pkg[key] = parser(r[1].trim()) as never;
     }
@@ -330,7 +346,7 @@ export async function readAptSource(spec: string, arch = 'all') {
     [ 'bin', 'binary-' + arch, 'Packages' ] :
     [ 'src', 'source', 'Sources' ];
 
-  const pkgs: PkgInfo[] = [];
+  const pkgs: PkgVersionInfo[] = [];
   const ps = components.map(async(set) => {
     const url = `${ base }/dists/${ dist }/${ set }/${ dir }/${ fname }`;
     let chunks: Iterable<Uint8Array>;
