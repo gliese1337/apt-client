@@ -1,5 +1,8 @@
 import { version_cmp } from './version_cmp';
 import { PkgVersionInfo, BasePkgInfo, readAptSource, SrcPkgInfo, BinPkgInfo } from './aptreader';
+import * as fp from 'fetch-ponyfill';
+
+const { fetch } = fp();
 
 export { PkgVersionInfo };
 
@@ -41,7 +44,7 @@ async function iterVersionedPackageFiles<T extends BasePkgInfo, F>(
           }
         }
       }
-    } 
+    }
   }
 
   return files;
@@ -156,7 +159,7 @@ export class AptClient {
 
       if (src_pkgs.has(name)) {
         src_info.set(name, src_pkgs.get(name).versions);
-      } 
+      }
     }
 
     return { bin: bin_info, src: src_info };
