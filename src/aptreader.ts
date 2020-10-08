@@ -21,7 +21,7 @@ export type BasePkgInfo = {
   Section: string;
   Priority: 'optional' | 'extra' | 'source';
   Maintainer: ContactInfo;
-  
+
   Homepage?: string;
 
   OriginalMaintainer?: ContactInfo;
@@ -202,6 +202,8 @@ const pkgInfoValueParsers = {
   Architecture: splitspace,
   Description: multiline,
   Filename: id,
+  MD5sum: id,
+  SHA256: id,
 
   Maintainer: toContactInfo,
   OriginalMaintainer: toContactInfo,
@@ -296,7 +298,7 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
           state = 0;
           continue;
         }
-        
+
         if (i === len) {
           state = 3;
           break;
@@ -310,7 +312,7 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
           continue;
         }
       }
-      
+
       asciibuf[out++] = c;
     }
   }
