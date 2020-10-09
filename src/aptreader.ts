@@ -343,27 +343,38 @@ function parseIndex(
 }
 
 export async function readAptSource(spec: string, arch = 'all') {
-  const [ type, base, dist, ...components ] = spec.split(/\s/g);
-  const [ t, dir, fname ] = type === 'deb' ?
-    [ 'bin', 'binary-' + arch, 'Packages' ] :
-    [ 'src', 'source', 'Sources' ];
-
   const pkgs: PkgVersionInfo[] = [];
-  const ps = components.map(async(set) => {
-    const url = `${ base }/dists/${ dist }/${ set }/${ dir }/${ fname }`;
+
+  const fetchAndParse = async (url: string, base: string, type: string) => {
     let chunks: Iterable<Uint8Array>;
 
     let res = await fetch(url);
     if (res.status === 200) {
       chunks = [new Uint8Array(await res.arrayBuffer())];
     } else {
-      res = await fetch(url+'.gz');
+      res = await fetch(url + '.gz');
       if (res.status !== 200) return;
       chunks = inflate(new Uint8Array(await res.arrayBuffer()));
     }
 
-    parseIndex(chunks, base, t, pkgs);
-  });
+    parseIndex(chunks, base, type, pkgs);
+  };
+
+  let ps: Promise<void>[] = [];
+  if (/\s/.test(spec)) {
+    const [ type, base, dist, ...components ] = spec.split(/\s/g);
+    const [ t, dir, fname ] = type === 'deb' ?
+      [ 'bin', 'binary-' + arch, 'Packages' ] :
+      [ 'src', 'source', 'Sources' ];
+    ps = components.map(set => {
+      const url = `${base}/dists/${dist}/${set}/${dir}/${fname}`;
+      return fetchAndParse(url, base, t);
+    });
+  } else {
+    const [, base, , fname ] = spec.match(/(https?:\/\/[^\s]*)(\/dists\/\w*)?\/(Packages|Sources)[\.\w]?$/);
+    const t = 'Sources' === fname ? 'src' : 'bin';
+    ps = [fetchAndParse(spec, base, t)];
+  }
 
   await Promise.all(ps);
 
