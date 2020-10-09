@@ -3,7 +3,7 @@ Apt-Client
 
 A basic Apt client for node and the browser, so you can get information about debian packages.
 
-* `new AptClient(sources?: string[], arch?: string, cachetime? number)` Constructs a new client for a possibly-empty list of source and optionally-specified architecture (defaults to 'all'). The sources should be strings just like you would see in a `sources.list` file, one per line. If `cachetime` is specified, `client.update` will avoid re-requesting data for particular sources if they have already been requested within the last `cachetime` milliseconds.
+* `new AptClient(sources?: string[], arch?: string, cachetime? number)` Constructs a new client for a possibly-empty list of source and optionally-specified architecture (defaults to 'all'). The sources should be strings just like you would see in a `sources.list` file, one per line, or URLs directly to a Sources(.gz) or Packages(.gz) file. If `cachetime` is specified, `client.update` will avoid re-requesting data for particular sources if they have already been requested within the last `cachetime` milliseconds.
 
 * `client.update(sources?: string[], arch?: string, cachetime? number, clear?: boolean): Promise<void>` Rewrites the local cache with data fetched from the specified `sources`. The first three arguments default to the values provided to the constructor. This allows you the flexibility to specify a source list, target architecture, or cache timeout at client-creation, or at update time. The `clear` parameter specifies whether the cached package data should be totally replace, or only updated--the latter is useful if you wish to re-request a specific source without wiping out cached data previously requested from other sources. This defaults to true.
 

@@ -320,12 +320,20 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
   if (field) yield [field, buf2string(asciibuf, out)];
 }
 
-function parseIndex(
-  chunks: Iterable<Uint8Array>,
-  base: string,
-  type: string,
-  pkgs: PkgVersionInfo[],
-): void {
+async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgVersionInfo[]) {
+  let chunks: Iterable<Uint8Array>;
+
+  let res = await fetch(url);
+  if (res.status === 200) {
+    chunks = url.endsWith('.gz') ? 
+      inflate(new Uint8Array(await res.arrayBuffer())) :
+      [new Uint8Array(await res.arrayBuffer())];
+  } else if (!url.endsWith('.gz')) {
+    res = await fetch(url + '.gz');
+    if (res.status !== 200) return;
+    chunks = inflate(new Uint8Array(await res.arrayBuffer()));
+  } else return;
+
   let pkg = { RepoBase: base, type } as PkgVersionInfo;
 
   for (const r of iterRecords(chunks)) {
@@ -345,22 +353,7 @@ function parseIndex(
 export async function readAptSource(spec: string, arch = 'all') {
   const pkgs: PkgVersionInfo[] = [];
 
-  const fetchAndParse = async (url: string, base: string, type: string) => {
-    let chunks: Iterable<Uint8Array>;
-
-    let res = await fetch(url);
-    if (res.status === 200) {
-      chunks = [new Uint8Array(await res.arrayBuffer())];
-    } else {
-      res = await fetch(url + '.gz');
-      if (res.status !== 200) return;
-      chunks = inflate(new Uint8Array(await res.arrayBuffer()));
-    }
-
-    parseIndex(chunks, base, type, pkgs);
-  };
-
-  let ps: Promise<void>[] = [];
+  let ps: Promise<void>[];
   if (/\s/.test(spec)) {
     const [ type, base, dist, ...components ] = spec.split(/\s/g);
     const [ t, dir, fname ] = type === 'deb' ?
@@ -368,12 +361,12 @@ export async function readAptSource(spec: string, arch = 'all') {
       [ 'src', 'source', 'Sources' ];
     ps = components.map(set => {
       const url = `${base}/dists/${dist}/${set}/${dir}/${fname}`;
-      return fetchAndParse(url, base, t);
+      return fetchAndParse(url, base, t, pkgs);
     });
   } else {
-    const [, base, , fname ] = spec.match(/(https?:\/\/[^\s]*)(\/dists\/\w*)?\/(Packages|Sources)[\.\w]?$/);
+    const [, base, , fname ] = spec.match(/(https?:\/\/[^\s]*)(\/dists\/\w*)?\/(Packages|Sources)(\.gz)?$/);
     const t = 'Sources' === fname ? 'src' : 'bin';
-    ps = [fetchAndParse(spec, base, t)];
+    ps = [fetchAndParse(spec, base, t, pkgs)];
   }
 
   await Promise.all(ps);
