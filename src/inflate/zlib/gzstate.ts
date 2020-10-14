@@ -1,12 +1,13 @@
+import c from './constants';
 import GZheader from "./gzheader";
 
-export class GZstate {
-  mode = 0;              /* current inflate mode */
+export default class GZstate {
+  mode = c.HEAD;         /* current inflate mode */
   last = 0;              /* true if processing last block */
   wrap = 0;              /* bit 0 true for zlib, bit 1 true for gzip */
   havedict = 0;          /* true if dictionary provided */
   flags = 0;             /* gzip header method and flags (0 if zlib) */
-  dmax = 0;              /* zlib header max distance (INFLATE_STRICT) */
+  dmax = 32768;          /* zlib header max distance (INFLATE_STRICT) */
   check = 0;             /* protected copy of check value */
   total = 0;             /* protected copy of output count */
   head: GZheader | null = null; /* where to save gzip header information */
@@ -30,8 +31,8 @@ export class GZstate {
   extra = 0;             /* extra bits needed */
 
   /* fixed and dynamic code tables */
-  lencode: Uint32Array | null = null;        /* starting table for length/literal codes */
-  distcode: Uint32Array | null = null;       /* starting table for distance codes */
+  lencode: Uint32Array;  /* starting table for length/literal codes */
+  distcode: Uint32Array; /* starting table for distance codes */
   lenbits = 0;           /* index bits for lencode */
   distbits = 0;          /* index bits for distcode */
 
@@ -40,19 +41,17 @@ export class GZstate {
   nlen = 0;              /* number of length code lengths */
   ndist = 0;             /* number of distance code lengths */
   have = 0;              /* number of code lengths in lens[] */
-  next = null;              /* next available space in codes[] */
 
   lens = new Uint16Array(320); /* temporary storage for code lengths */
   work = new Uint16Array(288); /* work area for code table building */
+  lendyn: Uint32Array;         /* dynamic table for length/literal codes (JS specific) */
+  distdyn: Uint32Array;        /* dynamic table for distance codes (JS specific) */
+  sane = true;                 /* if false, allow invalid distance too far */
+  back = -1;                   /* bits back of last unprocessed length/lit */
+  was = 0;                     /* initial length of match */
 
-  /*
-   because we don't have pointers in js, we use lencode and distcode directly
-   as buffers so we don't need codes
-  */
-  //this.codes = new utils.Buf32(ENOUGH);       /* space for code tables */
-  lendyn: Uint32Array | null = null;       /* dynamic table for length/literal codes (JS specific) */
-  distdyn: Uint32Array | null = null;      /* dynamic table for distance codes (JS specific) */
-  sane = false;               /* if false, allow invalid distance too far */
-  back = 0;                   /* bits back of last unprocessed length/lit */
-  was = 0;                    /* initial length of match */
+  constructor() {
+    this.lencode = this.lendyn = new Uint32Array(c.ENOUGH_LENS);
+    this.distcode = this.distdyn = new Uint32Array(c.ENOUGH_DISTS);
+  }
 }

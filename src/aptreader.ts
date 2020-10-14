@@ -322,14 +322,12 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
 async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgVersionInfo[]) {
   let chunks: Iterable<Uint8Array>;
 
-  console.log('fetching', url);
   let res = await fetch(url);
   if (res.status === 200) {
     chunks = url.endsWith('.gz') ? 
       inflate(new Uint8Array(await res.arrayBuffer())) :
       [new Uint8Array(await res.arrayBuffer())];
   } else if (!url.endsWith('.gz')) {
-    console.log('fetching', url+'.gz');
     res = await fetch(url + '.gz');
     if (res.status !== 200) return false;
     chunks = inflate(new Uint8Array(await res.arrayBuffer()));

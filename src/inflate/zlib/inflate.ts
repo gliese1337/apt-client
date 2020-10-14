@@ -20,9 +20,10 @@
 // This source file has been altered from its original version.
 // It has been translated to TypeScript.
 
+import c from './constants';
 import inflate_fast  from './inffast';
 import inflate_table from './inftrees';
-import { GZstate } from './gzstate';
+import GZstate from './gzstate';
 import ZStream from './zstream';
 import GZheader from './gzheader';
 
@@ -84,171 +85,12 @@ function crc32(crc: number, buf: Uint8Array, len: number, pos: number) {
   return (crc ^ (-1)); // >>> 0;
 }
 
-const CODES = 0;
-const LENS = 1;
-const DISTS = 2;
-
-/* Public constants ==========================================================*/
-/* ===========================================================================*/
-
-/* Allowed flush values; see deflate() and inflate() below for details */
-//const Z_NO_FLUSH      = 0;
-//const Z_PARTIAL_FLUSH = 1;
-//const Z_SYNC_FLUSH    = 2;
-//const Z_FULL_FLUSH    = 3;
-const Z_FINISH        = 4;
-const Z_BLOCK         = 5;
-const Z_TREES         = 6;
-
-
-/* Return codes for the compression/decompression functions. Negative values
- * are errors, positive values are used for special but normal events.
- */
-const Z_OK            = 0;
-const Z_STREAM_END    = 1;
-const Z_NEED_DICT     = 2;
-//const Z_ERRNO         = -1;
-const Z_STREAM_ERROR  = -2;
-const Z_DATA_ERROR    = -3;
-const Z_MEM_ERROR     = -4;
-const Z_BUF_ERROR     = -5;
-//const Z_VERSION_ERROR = -6;
-
-/* The deflate compression method */
-const Z_DEFLATED  = 8;
-
-
-/* STATES ====================================================================*/
-/* ===========================================================================*/
-
-const    HEAD = 1;       /* i: waiting for magic header */
-const    FLAGS = 2;      /* i: waiting for method and flags (gzip) */
-const    TIME = 3;       /* i: waiting for modification time (gzip) */
-const    OS = 4;         /* i: waiting for extra flags and operating system (gzip) */
-const    EXLEN = 5;      /* i: waiting for extra length (gzip) */
-const    EXTRA = 6;      /* i: waiting for extra bytes (gzip) */
-const    NAME = 7;       /* i: waiting for end of file name (gzip) */
-const    COMMENT = 8;    /* i: waiting for end of comment (gzip) */
-const    HCRC = 9;       /* i: waiting for header crc (gzip) */
-const    DICTID = 10;    /* i: waiting for dictionary check value */
-const    DICT = 11;      /* waiting for inflateSetDictionary() call */
-const    TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
-const    TYPEDO = 13;    /* i: same, but skip check to exit inflate on new block */
-const    STORED = 14;    /* i: waiting for stored size (length and complement) */
-const    COPY_ = 15;     /* i/o: same as COPY below, but only first time in */
-const    COPY = 16;      /* i/o: waiting for input or output to copy stored block */
-const    TABLE = 17;     /* i: waiting for dynamic block table lengths */
-const    LENLENS = 18;   /* i: waiting for code length code lengths */
-const    CODELENS = 19;  /* i: waiting for length/lit and distance code lengths */
-const    LEN_ = 20;      /* i: same as LEN below, but only first time in */
-const    LEN = 21;       /* i: waiting for length/lit/eob code */
-const    LENEXT = 22;    /* i: waiting for length extra bits */
-const    DIST = 23;      /* i: waiting for distance code */
-const    DISTEXT = 24;   /* i: waiting for distance extra bits */
-const    MATCH = 25;     /* o: waiting for output space to copy string */
-const    LIT = 26;       /* o: waiting for output space to write literal */
-const    CHECK = 27;     /* i: waiting for 32-bit check value */
-const    LENGTH = 28;    /* i: waiting for 32-bit length (gzip) */
-const    DONE = 29;      /* finished check, done -- remain here until reset */
-const    BAD = 30;       /* got a data error -- remain here until reset */
-const    MEM = 31;       /* got an inflate() memory error -- remain here until reset */
-const    SYNC = 32;      /* looking for synchronization bytes to restart inflate() */
-
-/* ===========================================================================*/
-
-const ENOUGH_LENS = 852;
-const ENOUGH_DISTS = 592;
-
 function zswap32(q: number) {
   return  (((q >>> 24) & 0xff) +
           ((q >>> 8) & 0xff00) +
           ((q & 0xff00) << 8) +
           ((q & 0xff) << 24));
 }
-
-function inflateResetKeep(strm: ZStream) {
-  if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  const state = strm.state;
-  strm.total_in = strm.total_out = state.total = 0;
-  strm.msg = ''; /*Z_NULL*/
-  if (state.wrap) {       /* to support ill-conceived Java test suite */
-    strm.adler = state.wrap & 1;
-  }
-  state.mode = HEAD;
-  state.last = 0;
-  state.havedict = 0;
-  state.dmax = 32768;
-  state.head = null/*Z_NULL*/;
-  state.hold = 0;
-  state.bits = 0;
-  //state.lencode = state.distcode = state.next = state.codes;
-  state.lencode = state.lendyn = new Uint32Array(ENOUGH_LENS);
-  state.distcode = state.distdyn = new Uint32Array(ENOUGH_DISTS);
-
-  state.sane = true;
-  state.back = -1;
-  //Tracev((stderr, "inflate: reset\n"));
-  return Z_OK;
-}
-
-function inflateReset(strm: ZStream) {
-  if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  const state = strm.state;
-  state.wsize = 0;
-  state.whave = 0;
-  state.wnext = 0;
-  return inflateResetKeep(strm);
-
-}
-
-function inflateReset2(strm: ZStream, windowBits: number) {
-  /* get the state */
-  if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  const state = strm.state;
-
-  /* extract wrap request from windowBits parameter */
-  let wrap: number;
-  if (windowBits < 0) {
-    wrap = 0;
-    windowBits = -windowBits;
-  } else {
-    wrap = (windowBits >> 4) + 1;
-    if (windowBits < 48) {
-      windowBits &= 15;
-    }
-  }
-
-  /* set number of window bits, free window if different */
-  if (windowBits && (windowBits < 8 || windowBits > 15)) {
-    return Z_STREAM_ERROR;
-  }
-  if (state.window !== null && state.wbits !== windowBits) {
-    state.window = null;
-  }
-
-  /* update state and reset the rest of it */
-  state.wrap = wrap;
-  state.wbits = windowBits;
-  return inflateReset(strm);
-}
-
-function inflateInit(strm: ZStream, windowBits: number) {
-  if (!strm) { return Z_STREAM_ERROR; }
-  //strm.msg = Z_NULL;                 /* in case we return an error */
-
-  const state = new GZstate();
-
-  //if (state === Z_NULL) return Z_MEM_ERROR;
-  //Tracev((stderr, "inflate: allocated\n"));
-  strm.state = state;
-  state.window = null/*Z_NULL*/;
-  const ret = inflateReset2(strm, windowBits);
-  if (ret !== Z_OK) {
-    strm.state = null/*Z_NULL*/;
-  }
-  return ret;
-}
-
 
 /*
  Return state with length and distance decoding tables and index sizes set to
@@ -279,13 +121,13 @@ function fixedtables(state: GZstate) {
     while (sym < 280) { state.lens[sym++] = 7; }
     while (sym < 288) { state.lens[sym++] = 8; }
 
-    inflate_table(LENS,  state.lens, 0, 288, lenfix,   0, state.work, { bits: 9 });
+    inflate_table(c.LENS,  state.lens, 0, 288, lenfix,   0, state.work, { bits: 9 });
 
     /* distance table */
     sym = 0;
     while (sym < 32) { state.lens[sym++] = 5; }
 
-    inflate_table(DISTS, state.lens, 0, 32,   distfix, 0, state.work, { bits: 5 });
+    inflate_table(c.DISTS, state.lens, 0, 32,   distfix, 0, state.work, { bits: 5 });
 
     /* do this just once */
     virgin = false;
@@ -370,18 +212,17 @@ function inflate(strm: ZStream, flush: number) {
   const order = /* permutation of code lengths */
     [ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 ];
 
-
   if (!strm || !strm.state || !strm.output ||
       (!strm.input && strm.avail_in !== 0)) {
-    return Z_STREAM_ERROR;
+    return c.Z_STREAM_ERROR;
   }
 
   const state = strm.state;
-  if (state.mode === TYPE) { state.mode = TYPEDO; }    /* skip check */
-
+  if (state.mode === c.TYPE) { state.mode = c.TYPEDO; }    /* skip check */
 
   //--- LOAD() ---
-  let { input, output } = strm; // input/output buffers
+  const output = strm.output;
+  const input = strm.input as Uint8Array;
   let next = strm.next_in; /* next input INDEX */
   let put = strm.next_out; /* next output INDEX */
 
@@ -396,14 +237,14 @@ function inflate(strm: ZStream, flush: number) {
   /* save starting available input and output */
   let _in = have;
   let _out = left;
-  let ret = Z_OK; /* return code */
+  let ret = c.Z_OK; /* return code */
 
   inf_leave: // goto emulation
   for (;;) {
     switch (state.mode) {
-      case HEAD:
+      case c.HEAD:
         if (state.wrap === 0) {
-          state.mode = TYPEDO;
+          state.mode = c.TYPEDO;
           break;
         }
         //=== NEEDBITS(16);
@@ -415,7 +256,7 @@ function inflate(strm: ZStream, flush: number) {
         }
         //===//
         if ((state.wrap & 2) && hold === 0x8b1f) {  /* gzip header */
-          state.check = 0/*crc32(0L, Z_NULL, 0)*/;
+          state.check = 0/*crc32(0L, c.Z_NULL, 0)*/;
           //=== CRC2(state.check, hold);
           hbuf[0] = hold & 0xff;
           hbuf[1] = (hold >>> 8) & 0xff;
@@ -426,7 +267,7 @@ function inflate(strm: ZStream, flush: number) {
           hold = 0;
           bits = 0;
           //===//
-          state.mode = FLAGS;
+          state.mode = c.FLAGS;
           break;
         }
         state.flags = 0;           /* expect zlib header */
@@ -436,12 +277,12 @@ function inflate(strm: ZStream, flush: number) {
         if (!(state.wrap & 1) ||   /* check if zlib header allowed */
           (((hold & 0xff)/*BITS(8)*/ << 8) + (hold >> 8)) % 31) {
           strm.msg = 'incorrect header check';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
-        if ((hold & 0x0f)/*BITS(4)*/ !== Z_DEFLATED) {
+        if ((hold & 0x0f)/*BITS(4)*/ !== c.Z_DEFLATED) {
           strm.msg = 'unknown compression method';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         //--- DROPBITS(4) ---//
@@ -454,19 +295,18 @@ function inflate(strm: ZStream, flush: number) {
         }
         else if (len > state.wbits) {
           strm.msg = 'invalid window size';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         state.dmax = 1 << len;
-        //Tracev((stderr, "inflate:   zlib header ok\n"));
-        strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
-        state.mode = hold & 0x200 ? DICTID : TYPE;
+        strm.adler = state.check = 1/*adler32(0L, c.Z_NULL, 0)*/;
+        state.mode = hold & 0x200 ? c.DICTID : c.TYPE;
         //=== INITBITS();
         hold = 0;
         bits = 0;
         //===//
         break;
-      case FLAGS:
+      case c.FLAGS:
         //=== NEEDBITS(16); */
         while (bits < 16) {
           if (have === 0) { break inf_leave; }
@@ -476,14 +316,14 @@ function inflate(strm: ZStream, flush: number) {
         }
         //===//
         state.flags = hold;
-        if ((state.flags & 0xff) !== Z_DEFLATED) {
+        if ((state.flags & 0xff) !== c.Z_DEFLATED) {
           strm.msg = 'unknown compression method';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         if (state.flags & 0xe000) {
           strm.msg = 'unknown header flags set';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         if (state.head) {
@@ -500,9 +340,9 @@ function inflate(strm: ZStream, flush: number) {
         hold = 0;
         bits = 0;
         //===//
-        state.mode = TIME;
+        state.mode = c.TIME;
         /* falls through */
-      case TIME:
+      case c.TIME:
         //=== NEEDBITS(32); */
         while (bits < 32) {
           if (have === 0) { break inf_leave; }
@@ -527,9 +367,9 @@ function inflate(strm: ZStream, flush: number) {
         hold = 0;
         bits = 0;
         //===//
-        state.mode = OS;
+        state.mode = c.TIME;
         /* falls through */
-      case OS:
+      case c.TIME:
         //=== NEEDBITS(16); */
         while (bits < 16) {
           if (have === 0) { break inf_leave; }
@@ -553,9 +393,9 @@ function inflate(strm: ZStream, flush: number) {
         hold = 0;
         bits = 0;
         //===//
-        state.mode = EXLEN;
+        state.mode = c.EXLEN;
         /* falls through */
-      case EXLEN:
+      case c.EXLEN:
         if (state.flags & 0x0400) {
           //=== NEEDBITS(16); */
           while (bits < 16) {
@@ -582,11 +422,11 @@ function inflate(strm: ZStream, flush: number) {
           //===//
         }
         else if (state.head) {
-          state.head.extra = null/*Z_NULL*/;
+          state.head.extra = null/*c.Z_NULL*/;
         }
-        state.mode = EXTRA;
+        state.mode = c.EXTRA;
         /* falls through */
-      case EXTRA:
+      case c.EXTRA:
         if (state.flags & 0x0400) {
           copy = state.length;
           if (copy > have) { copy = have; }
@@ -621,9 +461,9 @@ function inflate(strm: ZStream, flush: number) {
           if (state.length) { break inf_leave; }
         }
         state.length = 0;
-        state.mode = NAME;
+        state.mode = c.NAME;
         /* falls through */
-      case NAME:
+      case c.NAME:
         if (state.flags & 0x0800) {
           if (have === 0) { break inf_leave; }
           copy = 0;
@@ -645,12 +485,12 @@ function inflate(strm: ZStream, flush: number) {
           if (len) { break inf_leave; }
         }
         else if (state.head) {
-          state.head.name = null;
+          state.head.name = '';
         }
         state.length = 0;
-        state.mode = COMMENT;
+        state.mode = c.COMMENT;
         /* falls through */
-      case COMMENT:
+      case c.COMMENT:
         if (state.flags & 0x1000) {
           if (have === 0) { break inf_leave; }
           copy = 0;
@@ -670,11 +510,11 @@ function inflate(strm: ZStream, flush: number) {
           if (len) { break inf_leave; }
         }
         else if (state.head) {
-          state.head.comment = null;
+          state.head.comment = '';
         }
-        state.mode = HCRC;
+        state.mode = c.HCRC;
         /* falls through */
-      case HCRC:
+      case c.HCRC:
         if (state.flags & 0x0200) {
           //=== NEEDBITS(16); */
           while (bits < 16) {
@@ -686,7 +526,7 @@ function inflate(strm: ZStream, flush: number) {
           //===//
           if (hold !== (state.check & 0xffff)) {
             strm.msg = 'header crc mismatch';
-            state.mode = BAD;
+            state.mode = c.BAD;
             break;
           }
           //=== INITBITS();
@@ -699,9 +539,9 @@ function inflate(strm: ZStream, flush: number) {
           state.head.done = true;
         }
         strm.adler = state.check = 0;
-        state.mode = TYPE;
+        state.mode = c.TYPE;
         break;
-      case DICTID:
+      case c.DICTID:
         //=== NEEDBITS(32); */
         while (bits < 32) {
           if (have === 0) { break inf_leave; }
@@ -715,9 +555,9 @@ function inflate(strm: ZStream, flush: number) {
         hold = 0;
         bits = 0;
         //===//
-        state.mode = DICT;
+        state.mode = c.DICT;
         /* falls through */
-      case DICT:
+      case c.DICT:
         if (state.havedict === 0) {
           //--- RESTORE() ---
           strm.next_out = put;
@@ -727,21 +567,21 @@ function inflate(strm: ZStream, flush: number) {
           state.hold = hold;
           state.bits = bits;
           //---
-          return Z_NEED_DICT;
+          return c.Z_NEED_DICT;
         }
-        strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
-        state.mode = TYPE;
+        strm.adler = state.check = 1/*adler32(0L, c.Z_NULL, 0)*/;
+        state.mode = c.TYPE;
         /* falls through */
-      case TYPE:
-        if (flush === Z_BLOCK || flush === Z_TREES) { break inf_leave; }
+      case c.TYPE:
+        if (flush === c.Z_BLOCK || flush === c.Z_TREES) { break inf_leave; }
         /* falls through */
-      case TYPEDO:
+      case c.TYPEDO:
         if (state.last) {
           //--- BYTEBITS() ---//
           hold >>>= bits & 7;
           bits -= bits & 7;
           //---//
-          state.mode = CHECK;
+          state.mode = c.CHECK;
           break;
         }
         //=== NEEDBITS(3); */
@@ -760,16 +600,12 @@ function inflate(strm: ZStream, flush: number) {
 
         switch ((hold & 0x03)/*BITS(2)*/) {
           case 0:                             /* stored block */
-            //Tracev((stderr, "inflate:     stored block%s\n",
-            //        state.last ? " (last)" : ""));
-            state.mode = STORED;
+            state.mode = c.STORED;
             break;
           case 1:                             /* fixed block */
             fixedtables(state);
-            //Tracev((stderr, "inflate:     fixed codes block%s\n",
-            //        state.last ? " (last)" : ""));
-            state.mode = LEN_;             /* decode codes */
-            if (flush === Z_TREES) {
+            state.mode = c.LEN_;             /* decode codes */
+            if (flush === c.Z_TREES) {
               //--- DROPBITS(2) ---//
               hold >>>= 2;
               bits -= 2;
@@ -778,20 +614,18 @@ function inflate(strm: ZStream, flush: number) {
             }
             break;
           case 2:                             /* dynamic block */
-            //Tracev((stderr, "inflate:     dynamic codes block%s\n",
-            //        state.last ? " (last)" : ""));
-            state.mode = TABLE;
+            state.mode = c.TABLE;
             break;
           case 3:
             strm.msg = 'invalid block type';
-            state.mode = BAD;
+            state.mode = c.BAD;
         }
         //--- DROPBITS(2) ---//
         hold >>>= 2;
         bits -= 2;
         //---//
         break;
-      case STORED:
+      case c.STORED:
         //--- BYTEBITS() ---// /* go to byte boundary */
         hold >>>= bits & 7;
         bits -= bits & 7;
@@ -806,23 +640,21 @@ function inflate(strm: ZStream, flush: number) {
         //===//
         if ((hold & 0xffff) !== ((hold >>> 16) ^ 0xffff)) {
           strm.msg = 'invalid stored block lengths';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         state.length = hold & 0xffff;
-        //Tracev((stderr, "inflate:       stored length %u\n",
-        //        state.length));
         //=== INITBITS();
         hold = 0;
         bits = 0;
         //===//
-        state.mode = COPY_;
-        if (flush === Z_TREES) { break inf_leave; }
+        state.mode = c.COPY_;
+        if (flush === c.Z_TREES) { break inf_leave; }
         /* falls through */
-      case COPY_:
-        state.mode = COPY;
+      case c.COPY_:
+        state.mode = c.COPY;
         /* falls through */
-      case COPY:
+      case c.COPY:
         copy = state.length;
         if (copy) {
           if (copy > have) { copy = have; }
@@ -838,10 +670,9 @@ function inflate(strm: ZStream, flush: number) {
           state.length -= copy;
           break;
         }
-        //Tracev((stderr, "inflate:       stored end\n"));
-        state.mode = TYPE;
+        state.mode = c.TYPE;
         break;
-      case TABLE:
+      case c.TABLE:
         //=== NEEDBITS(14); */
         while (bits < 14) {
           if (have === 0) { break inf_leave; }
@@ -865,18 +696,15 @@ function inflate(strm: ZStream, flush: number) {
         hold >>>= 4;
         bits -= 4;
         //---//
-//#ifndef PKZIP_BUG_WORKAROUND
         if (state.nlen > 286 || state.ndist > 30) {
           strm.msg = 'too many length or distance symbols';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
-//#endif
-        //Tracev((stderr, "inflate:       table sizes ok\n"));
         state.have = 0;
-        state.mode = LENLENS;
+        state.mode = c.LENLENS;
         /* falls through */
-      case LENLENS:
+      case c.LENLENS:
         while (state.have < state.ncode) {
           //=== NEEDBITS(3);
           while (bits < 3) {
@@ -903,19 +731,18 @@ function inflate(strm: ZStream, flush: number) {
         state.lenbits = 7;
 
         opts = { bits: state.lenbits };
-        ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
+        ret = inflate_table(c.CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
         state.lenbits = opts.bits;
 
         if (ret) {
           strm.msg = 'invalid code lengths set';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
-        //Tracev((stderr, "inflate:       code lengths ok\n"));
         state.have = 0;
-        state.mode = CODELENS;
+        state.mode = c.CODELENS;
         /* falls through */
-      case CODELENS:
+      case c.CODELENS:
         while (state.have < state.nlen + state.ndist) {
           for (;;) {
             here = state.lencode[hold & ((1 << state.lenbits) - 1)];/*BITS(state.lenbits)*/
@@ -955,7 +782,7 @@ function inflate(strm: ZStream, flush: number) {
               //---//
               if (state.have === 0) {
                 strm.msg = 'invalid bit length repeat';
-                state.mode = BAD;
+                state.mode = c.BAD;
                 break;
               }
               len = state.lens[state.have - 1];
@@ -1009,7 +836,7 @@ function inflate(strm: ZStream, flush: number) {
             }
             if (state.have + copy > state.nlen + state.ndist) {
               strm.msg = 'invalid bit length repeat';
-              state.mode = BAD;
+              state.mode = c.BAD;
               break;
             }
             while (copy--) {
@@ -1019,12 +846,12 @@ function inflate(strm: ZStream, flush: number) {
         }
 
         /* handle error breaks in while */
-        if (state.mode === BAD) { break; }
+        if (state.mode === c.BAD) { break; }
 
         /* check for end-of-block code (better have one) */
         if (state.lens[256] === 0) {
           strm.msg = 'invalid code -- missing end-of-block';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
 
@@ -1034,7 +861,7 @@ function inflate(strm: ZStream, flush: number) {
         state.lenbits = 9;
 
         opts = { bits: state.lenbits };
-        ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
+        ret = inflate_table(c.LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
         // We have separate tables & no pointers. 2 commented lines below not needed.
         // state.next_index = opts.table_index;
         state.lenbits = opts.bits;
@@ -1042,7 +869,7 @@ function inflate(strm: ZStream, flush: number) {
 
         if (ret) {
           strm.msg = 'invalid literal/lengths set';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
 
@@ -1051,7 +878,7 @@ function inflate(strm: ZStream, flush: number) {
         // Switch to use dynamic table
         state.distcode = state.distdyn;
         opts = { bits: state.distbits };
-        ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
+        ret = inflate_table(c.DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
         // We have separate tables & no pointers. 2 commented lines below not needed.
         // state.next_index = opts.table_index;
         state.distbits = opts.bits;
@@ -1059,17 +886,16 @@ function inflate(strm: ZStream, flush: number) {
 
         if (ret) {
           strm.msg = 'invalid distances set';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
-        //Tracev((stderr, 'inflate:       codes ok\n'));
-        state.mode = LEN_;
-        if (flush === Z_TREES) { break inf_leave; }
+        state.mode = c.LEN_;
+        if (flush === c.Z_TREES) { break inf_leave; }
         /* falls through */
-      case LEN_:
-        state.mode = LEN;
+      case c.LEN_:
+        state.mode = c.LEN;
         /* falls through */
-      case LEN:
+      case c.LEN:
         if (have >= 6 && left >= 258) {
           //--- RESTORE() ---
           strm.next_out = put;
@@ -1082,16 +908,14 @@ function inflate(strm: ZStream, flush: number) {
           inflate_fast(strm, _out);
           //--- LOAD() ---
           put = strm.next_out;
-          output = strm.output;
           left = strm.avail_out;
           next = strm.next_in;
-          input = strm.input;
           have = strm.avail_in;
           hold = state.hold;
           bits = state.bits;
           //---
 
-          if (state.mode === TYPE) {
+          if (state.mode === c.TYPE) {
             state.back = -1;
           }
           break;
@@ -1143,27 +967,23 @@ function inflate(strm: ZStream, flush: number) {
         state.back += here_bits;
         state.length = here_val;
         if (here_op === 0) {
-          //Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
-          //        "inflate:         literal '%c'\n" :
-          //        "inflate:         literal 0x%02x\n", here.val));
-          state.mode = LIT;
+          state.mode = c.LIT;
           break;
         }
         if (here_op & 32) {
-          //Tracevv((stderr, "inflate:         end of block\n"));
           state.back = -1;
-          state.mode = TYPE;
+          state.mode = c.TYPE;
           break;
         }
         if (here_op & 64) {
           strm.msg = 'invalid literal/length code';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         state.extra = here_op & 15;
-        state.mode = LENEXT;
+        state.mode = c.LENEXT;
         /* falls through */
-      case LENEXT:
+      case c.LENEXT:
         if (state.extra) {
           //=== NEEDBITS(state.extra);
           n = state.extra;
@@ -1181,11 +1001,10 @@ function inflate(strm: ZStream, flush: number) {
           //---//
           state.back += state.extra;
         }
-        //Tracevv((stderr, "inflate:         length %u\n", state.length));
         state.was = state.length;
-        state.mode = DIST;
+        state.mode = c.DIST;
         /* falls through */
-      case DIST:
+      case c.DIST:
         for (;;) {
           here = state.distcode[hold & ((1 << state.distbits) - 1)];/*BITS(state.distbits)*/
           here_bits = here >>> 24;
@@ -1232,14 +1051,14 @@ function inflate(strm: ZStream, flush: number) {
         state.back += here_bits;
         if (here_op & 64) {
           strm.msg = 'invalid distance code';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
         state.offset = here_val;
         state.extra = (here_op) & 15;
-        state.mode = DISTEXT;
+        state.mode = c.DISTEXT;
         /* falls through */
-      case DISTEXT:
+      case c.DISTEXT:
         if (state.extra) {
           //=== NEEDBITS(state.extra);
           n = state.extra;
@@ -1259,12 +1078,12 @@ function inflate(strm: ZStream, flush: number) {
         }
         if (state.offset > state.dmax) {
           strm.msg = 'invalid distance too far back';
-          state.mode = BAD;
+          state.mode = c.BAD;
           break;
         }
-        state.mode = MATCH;
+        state.mode = c.MATCH;
         /* falls through */
-      case MATCH:
+      case c.MATCH:
         if (left === 0) { break inf_leave; }
         copy = _out - left;
         if (state.offset > copy) {         /* copy from window */
@@ -1272,7 +1091,7 @@ function inflate(strm: ZStream, flush: number) {
           if (copy > state.whave) {
             if (state.sane) {
               strm.msg = 'invalid distance too far back';
-              state.mode = BAD;
+              state.mode = c.BAD;
               break;
             }
           }
@@ -1284,7 +1103,7 @@ function inflate(strm: ZStream, flush: number) {
             from = state.wnext - copy;
           }
           if (copy > state.length) { copy = state.length; }
-          from_source = state.window;
+          from_source = state.window as Uint8Array;
         }
         else {                              /* copy from output */
           from_source = output;
@@ -1297,15 +1116,15 @@ function inflate(strm: ZStream, flush: number) {
         do {
           output[put++] = from_source[from++];
         } while (--copy);
-        if (state.length === 0) { state.mode = LEN; }
+        if (state.length === 0) { state.mode = c.LEN; }
         break;
-      case LIT:
+      case c.LIT:
         if (left === 0) { break inf_leave; }
         output[put++] = state.length;
         left--;
-        state.mode = LEN;
+        state.mode = c.LEN;
         break;
-      case CHECK:
+      case c.CHECK:
         if (state.wrap) {
           //=== NEEDBITS(32);
           while (bits < 32) {
@@ -1329,18 +1148,17 @@ function inflate(strm: ZStream, flush: number) {
           // NB: crc32 stored as signed 32-bit int, zswap32 returns signed too
           if ((state.flags ? hold : zswap32(hold)) !== state.check) {
             strm.msg = 'incorrect data check';
-            state.mode = BAD;
+            state.mode = c.BAD;
             break;
           }
           //=== INITBITS();
           hold = 0;
           bits = 0;
           //===//
-          //Tracev((stderr, "inflate:   check matches trailer\n"));
         }
-        state.mode = LENGTH;
+        state.mode = c.LENGTH;
         /* falls through */
-      case LENGTH:
+      case c.LENGTH:
         if (state.wrap && state.flags) {
           //=== NEEDBITS(32);
           while (bits < 32) {
@@ -1352,29 +1170,28 @@ function inflate(strm: ZStream, flush: number) {
           //===//
           if (hold !== (state.total & 0xffffffff)) {
             strm.msg = 'incorrect length check';
-            state.mode = BAD;
+            state.mode = c.BAD;
             break;
           }
           //=== INITBITS();
           hold = 0;
           bits = 0;
           //===//
-          //Tracev((stderr, "inflate:   length matches trailer\n"));
         }
-        state.mode = DONE;
+        state.mode = c.DONE;
         /* falls through */
-      case DONE:
-        ret = Z_STREAM_END;
+      case c.DONE:
+        ret = c.Z_STREAM_END;
         break inf_leave;
-      case BAD:
-        ret = Z_DATA_ERROR;
+      case c.BAD:
+        ret = c.Z_DATA_ERROR;
         break inf_leave;
-      case MEM:
-        return Z_MEM_ERROR;
-      case SYNC:
+      case c.MEM:
+        return c.Z_MEM_ERROR;
+      case c.SYNC:
         /* falls through */
       default:
-        return Z_STREAM_ERROR;
+        return c.Z_STREAM_ERROR;
     }
   }
 
@@ -1396,11 +1213,11 @@ function inflate(strm: ZStream, flush: number) {
   state.bits = bits;
   //---
 
-  if (state.wsize || (_out !== strm.avail_out && state.mode < BAD &&
-                      (state.mode < CHECK || flush !== Z_FINISH))) {
+  if (state.wsize || (_out !== strm.avail_out && state.mode < c.BAD &&
+                      (state.mode < c.CHECK || flush !== c.Z_FINISH))) {
     if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) {
-      state.mode = MEM;
-      return Z_MEM_ERROR;
+      state.mode = c.MEM;
+      return c.Z_MEM_ERROR;
     }
   }
   _in -= strm.avail_in;
@@ -1413,28 +1230,27 @@ function inflate(strm: ZStream, flush: number) {
       (state.flags ? crc32(state.check, output, _out, strm.next_out - _out) : adler32(state.check, output, _out, strm.next_out - _out));
   }
   strm.data_type = state.bits + (state.last ? 64 : 0) +
-                    (state.mode === TYPE ? 128 : 0) +
-                    (state.mode === LEN_ || state.mode === COPY_ ? 256 : 0);
-  if (((_in === 0 && _out === 0) || flush === Z_FINISH) && ret === Z_OK) {
-    ret = Z_BUF_ERROR;
+                    (state.mode === c.TYPE ? 128 : 0) +
+                    (state.mode === c.LEN_ || state.mode === c.COPY_ ? 256 : 0);
+  if (((_in === 0 && _out === 0) || flush === c.Z_FINISH) && ret === c.Z_OK) {
+    ret = c.Z_BUF_ERROR;
   }
   return ret;
 }
 
 function inflateGetHeader(strm: ZStream, head: GZheader) {
   /* check state */
-  if (!strm || !strm.state) { return Z_STREAM_ERROR; }
+  if (!strm || !strm.state) { return c.Z_STREAM_ERROR; }
   const state = strm.state;
-  if ((state.wrap & 2) === 0) { return Z_STREAM_ERROR; }
+  if ((state.wrap & 2) === 0) { return c.Z_STREAM_ERROR; }
 
   /* save header structure */
   state.head = head;
   head.done = false;
-  return Z_OK;
+  return c.Z_OK;
 }
 
 export default {
-  inflateInit,
   inflate,
   inflateGetHeader,
 }

@@ -3,30 +3,10 @@ import c            from './zlib/constants';
 import ZStream      from './zlib/zstream';
 import GZheader     from './zlib/gzheader';
 
-const msg = {
-  2:      'need dictionary',     /* Z_NEED_DICT       2  */
-  1:      'stream end',          /* Z_STREAM_END      1  */
-  0:      '',                    /* Z_OK              0  */
-  '-1':   'file error',          /* Z_ERRNO         (-1) */
-  '-2':   'stream error',        /* Z_STREAM_ERROR  (-2) */
-  '-3':   'data error',          /* Z_DATA_ERROR    (-3) */
-  '-4':   'insufficient memory', /* Z_MEM_ERROR     (-4) */
-  '-5':   'buffer error',        /* Z_BUF_ERROR     (-5) */
-  '-6':   'incompatible version' /* Z_VERSION_ERROR (-6) */
-} as { [key: number]: string };
-
 const chunkSize = 16384;
 
 export default function * inflate(buffer: Uint8Array): Generator<Uint8Array> {
-  const strm   = new ZStream();
-  strm.avail_out = 0;
-
-  let status  = zlib_inflate.inflateInit(strm, 47);
-
-  if (status !== c.Z_OK) {
-    throw new Error(msg[status]);
-  }
-
+  const strm   = new ZStream(47);
   const header = new GZheader();
 
   zlib_inflate.inflateGetHeader(strm, header);
@@ -41,6 +21,7 @@ export default function * inflate(buffer: Uint8Array): Generator<Uint8Array> {
   strm.next_in = 0;
   strm.avail_in = strm.input.length;
 
+  let status: number;
   do {
     if (strm.avail_out === 0) {
       strm.output = new Uint8Array(chunkSize);
@@ -59,10 +40,10 @@ export default function * inflate(buffer: Uint8Array): Generator<Uint8Array> {
       return;
     }
 
-    if (strm.next_out) {
-      if (strm.avail_out === 0 || status === c.Z_STREAM_END || (strm.avail_in === 0 && (_mode === c.Z_FINISH || _mode === c.Z_SYNC_FLUSH))) {
-        const b = strm.output;
-        const size = strm.next_out;
+    const size = strm.next_out;
+    if (size) {
+      const b = strm.output;
+      if (b && (strm.avail_out === 0 || status === c.Z_STREAM_END || (strm.avail_in === 0 && (_mode === c.Z_FINISH || _mode === c.Z_SYNC_FLUSH)))) {
         yield b.length === size ? b : b.subarray(0, size);
       }
     }

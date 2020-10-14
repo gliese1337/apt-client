@@ -156,12 +156,14 @@ export class AptClient {
     const { bin_pkgs, src_pkgs } = this;
 
     for (const name of pkgNames) {
-      if (bin_pkgs.has(name)) {
-        bin_info.set(name, bin_pkgs.get(name).versions);
+      const bin_pkg = bin_pkgs.get(name);
+      if (bin_pkg) {
+        bin_info.set(name, bin_pkg.versions);
       }
 
-      if (src_pkgs.has(name)) {
-        src_info.set(name, src_pkgs.get(name).versions);
+      const src_pkg = src_pkgs.get(name);
+      if (src_pkg) {
+        src_info.set(name, src_pkg.versions);
       }
     }
 

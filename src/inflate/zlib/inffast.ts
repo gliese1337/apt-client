@@ -69,8 +69,9 @@ export default function inflate_fast(strm: ZStream, start: number) {
   let from: number;        /* where to copy match from */
   let from_source: Uint8Array;
 
-  const { input, output } = strm; // JS specific, because we have no pointers
-
+  const input = strm.input as Uint8Array;
+  const output = strm.output as Uint8Array;
+  
   /* copy state to local variables */
   const state = strm.state;
   let _in = strm.next_in;                      /* local strm.input */
@@ -82,7 +83,7 @@ export default function inflate_fast(strm: ZStream, start: number) {
   const wsize = state.wsize;                   /* window size or zero if not using window */
   const whave = state.whave;                   /* valid bytes in the window */
   const wnext = state.wnext;                   /* window write index */
-  const window = state.window;                 /* allocated sliding window, if wsize != 0 */
+  const window = state.window as Uint8Array;   /* allocated sliding window, if wsize != 0 */
   let hold = state.hold;                       /* local strm.hold */
   let bits = state.bits;                       /* local strm.bits */
   const lcode = state.lencode;                 /* local strm.lencode */
@@ -111,9 +112,6 @@ export default function inflate_fast(strm: ZStream, start: number) {
       bits -= op;
       op = (here >>> 16) & 0xff/*here.op*/;
       if (op === 0) {                          /* literal */
-        //Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
-        //        "inflate:         literal '%c'\n" :
-        //        "inflate:         literal 0x%02x\n", here.val));
         output[_out++] = here & 0xffff/*here.val*/;
       }
       else if (op & 16) {                     /* length base */
@@ -128,7 +126,6 @@ export default function inflate_fast(strm: ZStream, start: number) {
           hold >>>= op;
           bits -= op;
         }
-        //Tracevv((stderr, "inflate:         length %u\n", len));
         if (bits < 15) {
           hold += input[_in++] << bits;
           bits += 8;
@@ -163,7 +160,6 @@ export default function inflate_fast(strm: ZStream, start: number) {
             }
             hold >>>= op;
             bits -= op;
-            //Tracevv((stderr, "inflate:         distance %u\n", dist));
             op = _out - beg;                /* max distance in output */
             if (dist > op) {                /* see if copy from window */
               op = dist - op;               /* distance back in window */
@@ -265,7 +261,6 @@ export default function inflate_fast(strm: ZStream, start: number) {
         continue dolen;
       }
       else if (op & 32) {                     /* end-of-block */
-        //Tracevv((stderr, "inflate:         end of block\n"));
         state.mode = TYPE;
         break top;
       }
