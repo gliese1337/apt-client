@@ -322,16 +322,18 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
 async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgVersionInfo[]) {
   let chunks: Iterable<Uint8Array>;
 
+  console.log('fetching', url);
   let res = await fetch(url);
   if (res.status === 200) {
     chunks = url.endsWith('.gz') ? 
       inflate(new Uint8Array(await res.arrayBuffer())) :
       [new Uint8Array(await res.arrayBuffer())];
   } else if (!url.endsWith('.gz')) {
+    console.log('fetching', url+'.gz');
     res = await fetch(url + '.gz');
-    if (res.status !== 200) return;
+    if (res.status !== 200) return false;
     chunks = inflate(new Uint8Array(await res.arrayBuffer()));
-  } else return;
+  } else return false;
 
   let pkg = { RepoBase: base, type } as PkgVersionInfo;
 
@@ -347,28 +349,40 @@ async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgV
   }
 
   if (pkg.Package) pkgs.push(pkg);
+  return true;
 }
 
-export async function readAptSource(spec: string, arch = 'all') {
+const specrx = /(\S+)\s+(\S+)\s+(\S+)\s+(.+)/;
+const urlrx = /(https?:\/\/[^\s]*)(\/dists\/\w*)?\/(Packages|Sources)(\.gz)?$/;
+
+export async function readAptSource(spec: string, arch = 'all'): Promise<[PkgVersionInfo[], [string, string][]]> {
   const pkgs: PkgVersionInfo[] = [];
 
-  let ps: Promise<void>[];
-  if (/\s/.test(spec)) {
-    const [ type, base, dist, ...components ] = spec.split(/\s/g);
-    const [ t, dir, fname ] = type === 'deb' ?
-      [ 'bin', 'binary-' + arch, 'Packages' ] :
-      [ 'src', 'source', 'Sources' ];
-    ps = components.map(set => {
-      const url = `${base}/dists/${dist}/${set}/${dir}/${fname}`;
-      return fetchAndParse(url, base, t, pkgs);
-    });
-  } else {
-    const [, base, , fname ] = spec.match(/(https?:\/\/[^\s]*)(\/dists\/\w*)?\/(Packages|Sources)(\.gz)?$/);
-    const t = 'Sources' === fname ? 'src' : 'bin';
-    ps = [fetchAndParse(spec, base, t, pkgs)];
+  let ps: Promise<[string, string][]>[];
+  cases: {
+    let match = specrx.exec(spec);
+    if(match) {
+      const [ , type, base, dist, components ] = match;
+      const [ t, dir, fname ] = type === 'deb' ?
+        [ 'bin', 'binary-' + arch, 'Packages' ] :
+        [ 'src', 'source', 'Sources' ];
+      ps = components.split(/\s+/g).map(set => {
+        const url = `${base}/dists/${dist}/${set}/${dir}/${fname}`;
+        return fetchAndParse(url, base, t, pkgs).then(s => s ? [] : [["Could not retrieve", url]]);
+      });
+      break cases;
+    }
+  
+    match = urlrx.exec(spec);
+    if (match) {
+      const [, base, , fname ] = match;
+      const t = 'Sources' === fname ? 'src' : 'bin';
+      ps = [fetchAndParse(spec, base, t, pkgs).then(s => s ? [] : [["Could not retrieve", spec]])];
+      break cases;
+    }
+
+    return [pkgs, [["Invalid repository specification", spec]]];
   }
 
-  await Promise.all(ps);
-
-  return pkgs;
+  return [pkgs, (await Promise.all(ps)).flat()];
 }

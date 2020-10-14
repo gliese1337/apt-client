@@ -54,7 +54,7 @@ export class AptClient {
   private bin_pkgs = new Map<string, { versions: PkgInfo<BinPkgInfo>, files: Map<string, ArrayBuffer> }>();
   private src_pkgs = new Map<string, { versions: PkgInfo<SrcPkgInfo>, files: Map<string, { [key: string]: ArrayBuffer }>}>();
   private lastUpdated = new Map<string, [number, PkgVersionInfo[]]>();
-  private updatePromise: Promise<void[]> | null = null;
+  private updatePromise: Promise<[string, string][]> | null = null;
 
   constructor(private sources: string[] = [], private arch: string = 'all', private cachetime = -Infinity) { }
 
@@ -63,7 +63,7 @@ export class AptClient {
     arch = this.arch,
     cachetime = this.cachetime,
     clear = true,
-  ) {
+  ): Promise<[string, string][]> {
     if (this.updatePromise) {
       // wait for previously-started update process to conclude.
       await this.updatePromise;
@@ -75,52 +75,55 @@ export class AptClient {
       src_pkgs.clear();
     }
 
-    // Set the updatePromise so concurrent calls will know to wait.
-    this.updatePromise = Promise.resolve().then(() => {
-      const now = Date.now();
+    const now = Date.now();
 
-      const updateSrc = isFinite(cachetime) && cachetime > 0 ? async s => {
+    const updateSrc: (s: string) => Promise<[PkgVersionInfo[], [string, string][]]> =
+      isFinite(cachetime) && cachetime > 0 ? async(s: string) => {
         const lu = lastUpdated.get(s);
         if (lu && (now - lu[0] < cachetime)) {
-          if (!clear) return [];
-          return lu[1];
+          if (!clear) return [[],[]];
+          return [lu[1],[]];
         }
-        const pkgs = await readAptSource(s, arch);
+        const [pkgs, errs] = await readAptSource(s, arch);
         lastUpdated.set(s, [now, pkgs]);
-        return pkgs;
-      } : async s => {
-        const pkgs = await readAptSource(s, arch);
+        return [pkgs, errs];
+      } : async(s: string) => {
+        const [pkgs, errs] = await readAptSource(s, arch);
         lastUpdated.set(s, [now, pkgs]);
-        return pkgs;
+        return [pkgs, errs];
       };
 
-      return Promise.all(sources.map(async s => {
-        const pkgs = await updateSrc(s);
-        for (const pkg of pkgs) {
-          const { type, Package: name, Version: version } = pkg;
+    this.updatePromise = Promise.all(sources.map(async s => {
+      const [pkgs, errs] = await updateSrc(s);
+      for (const pkg of pkgs) {
+        const { type, Package: name, Version: version } = pkg;
 
-          const index = type === 'bin' ? bin_pkgs : src_pkgs;
-          let info = index.get(pkg.Package);
+        const index = type === 'bin' ? bin_pkgs : src_pkgs;
+        let info = index.get(pkg.Package);
 
-          if (!info) {
-            index.set(name, {
-              versions: { latest: version, versions: new Map([[version, pkg as any]]) },
-              files: new Map(),
-            });
-          } else {
-            const { latest, versions } = info.versions;
-            versions.set(version, pkg as any);
-            if (version_cmp(version, latest) > 0) {
-              info.versions.latest = version;
-            }
+        if (!info) {
+          index.set(name, {
+            versions: { latest: version, versions: new Map([[version, pkg as any]]) },
+            files: new Map(),
+          });
+        } else {
+          const { latest, versions } = info.versions;
+          versions.set(version, pkg as any);
+          if (version_cmp(version, latest) > 0) {
+            info.versions.latest = version;
           }
         }
-      }));
-    });
+      }
 
-    await this.updatePromise;
+      return errs;
+    })).then(errs => errs.flat());
+
+    const errs = await this.updatePromise;
+
     // Clear the updatePromise so later calls don't wait unnecessarily.
     this.updatePromise = null;
+
+    return errs;
   }
 
   public listPackages() {
