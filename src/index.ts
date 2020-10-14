@@ -1,6 +1,10 @@
 import { version_cmp } from './version_cmp';
 import { PkgVersionInfo, BasePkgInfo, readAptSource, SrcPkgInfo, BinPkgInfo } from './aptreader';
-import * as fp from 'fetch-ponyfill';
+import fp from 'fetch-ponyfill';
+import md5 from 'md5';
+import sha1 from 'sha1';
+import sha256 from 'sha256';
+import bufferFrom from 'buffer-from';
 
 const { fetch } = fp();
 
@@ -170,19 +174,43 @@ export class AptClient {
     return { bin: bin_info, src: src_info };
   }
 
-  public getBinFiles(pkgs: Iterable<string | [string, string]>) {
+  public getBinFiles(pkgs: Iterable<string | [string, string]>, checkHash=true) {
     return iterVersionedPackageFiles(pkgs, this.bin_pkgs, async (info) => {
       const res = await fetch(`${ info.RepoBase }/${ info.Filename }`);
-      return await res.arrayBuffer();
+      const data = await res.arrayBuffer();
+      if (checkHash) {
+        if (info.SHA256) {
+          const nhash = sha256(bufferFrom(data));
+          if (nhash !== info.SHA256) return null;
+        } else if (info.SHA1) {
+          const nhash = sha1(bufferFrom(data));
+          if (nhash !== info.SHA1) return null;
+        } else if (info.MD5sum) {
+          const nhash = md5(bufferFrom(data));
+          if (nhash !== info.MD5sum) return null;
+        }
+      }
+      return data;
     });
   }
 
-  public getSrcFiles(pkgs: Iterable<string | [string, string]>) {
+  public getSrcFiles(pkgs: Iterable<string | [string, string]>, checkHash=true) {
     return iterVersionedPackageFiles(pkgs, this.src_pkgs, async (info) => {
-      const obj = {} as { [key: string]: ArrayBuffer };
-      for (const { name } of info.Files) {
+      const obj = {} as { [key: string]: ArrayBuffer | null };
+      for (const { name, size } of info.Files) {
         const res = await fetch(`${ info.RepoBase }/${ info.Directory }/${ name }`);
-        obj[name] = await res.arrayBuffer();
+        const data = await res.arrayBuffer();
+        obj[name] = (!checkHash || (data.byteLength === size)) ? data : null;
+      }
+      for (const { name, size, hash } of info.ChecksumsSha1) {
+        const res = await fetch(`${ info.RepoBase }/${ info.Directory }/${ name }`);
+        const data = await res.arrayBuffer();
+        obj[name] = (!checkHash || (data.byteLength === size && sha1(bufferFrom(data)) === hash)) ? data : null;
+      }
+      for (const { name, size, hash } of info.ChecksumsSha256) {
+        const res = await fetch(`${ info.RepoBase }/${ info.Directory }/${ name }`);
+        const data = await res.arrayBuffer();
+        obj[name] = (!checkHash || (data.byteLength === size && sha256(bufferFrom(data)) === hash)) ? data : null;
       }
       return obj;
     });

@@ -1,6 +1,6 @@
 {
   "name": "apt-client",
-  "version": "2.1.2",
+  "version": "3.0.0",
   "description": "A library for reading aptly repositories",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,7 +28,15 @@
   },
   "homepage": "https://github.com/gliese1337/apt-client#readme",
   "dependencies": {
-    "fetch-ponyfill": "^6.1.0"
+    "@types/buffer-from": "^1.1.0",
+    "@types/md5": "^2.2.0",
+    "@types/sha1": "^1.1.2",
+    "@types/sha256": "^0.2.0",
+    "buffer-from": "^1.1.1",
+    "fetch-ponyfill": "^6.1.0",
+    "md5": "^2.3.0",
+    "sha1": "^1.1.1",
+    "sha256": "^0.2.0"
   },
   "devDependencies": {
     "@types/chai": "^4.2.13",

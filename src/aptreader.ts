@@ -1,4 +1,4 @@
-import * as fp from 'fetch-ponyfill';
+import fp from 'fetch-ponyfill';
 import inflate from './inflate';
 
 const { fetch } = fp();
