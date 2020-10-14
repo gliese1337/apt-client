@@ -1,5 +1,3 @@
-'use strict';
-
 // (C) 1995-2013 Jean-loup Gailly and Mark Adler
 // (C) 2014-2017 Vitaly Puzrin and Andrey Tupitsin
 //
@@ -19,9 +17,14 @@
 //   misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
+// This source file has been altered from its original version.
+// It has been translated to TypeScript.
+
+import ZStream from "./zstream";
+
 // See state defs from inflate.js
-var BAD = 30;       /* got a data error -- remain here until reset */
-var TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
+const BAD = 30;       /* got a data error -- remain here until reset */
+const TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
 
 /*
    Decode literal, length, and distance codes and write out the resulting
@@ -58,62 +61,34 @@ var TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
       requires strm.avail_out >= 258 for each loop to avoid checking for
       output space.
  */
-export default function inflate_fast(strm, start) {
-  var state;
-  var _in;                    /* local strm.input */
-  var last;                   /* have enough input while in < last */
-  var _out;                   /* local strm.output */
-  var beg;                    /* inflate()'s initial strm.output */
-  var end;                    /* while out < end, enough space available */
-//#ifdef INFLATE_STRICT
-  var dmax;                   /* maximum distance from zlib header */
-//#endif
-  var wsize;                  /* window size or zero if not using window */
-  var whave;                  /* valid bytes in the window */
-  var wnext;                  /* window write index */
-  // Use `s_window` instead `window`, avoid conflict with instrumentation tools
-  var s_window;               /* allocated sliding window, if wsize != 0 */
-  var hold;                   /* local strm.hold */
-  var bits;                   /* local strm.bits */
-  var lcode;                  /* local strm.lencode */
-  var dcode;                  /* local strm.distcode */
-  var lmask;                  /* mask for first level of length codes */
-  var dmask;                  /* mask for first level of distance codes */
-  var here;                   /* retrieved table entry */
-  var op;                     /* code bits, operation, extra bits, or */
-                              /*  window position, window bytes to copy */
-  var len;                    /* match length, unused bytes */
-  var dist;                   /* match distance */
-  var from;                   /* where to copy match from */
-  var from_source;
+export default function inflate_fast(strm: ZStream, start: number) {
+  let op: number;          /* code bits, operation, extra bits, or */
+                           /*  window position, window bytes to copy */
+  let len: number;         /* match length, unused bytes */
+  let dist: number;        /* match distance */
+  let from: number;        /* where to copy match from */
+  let from_source: Uint8Array;
 
-
-  var input, output; // JS specific, because we have no pointers
+  const { input, output } = strm; // JS specific, because we have no pointers
 
   /* copy state to local variables */
-  state = strm.state;
-  //here = state.here;
-  _in = strm.next_in;
-  input = strm.input;
-  last = _in + (strm.avail_in - 5);
-  _out = strm.next_out;
-  output = strm.output;
-  beg = _out - (start - strm.avail_out);
-  end = _out + (strm.avail_out - 257);
-//#ifdef INFLATE_STRICT
-  dmax = state.dmax;
-//#endif
-  wsize = state.wsize;
-  whave = state.whave;
-  wnext = state.wnext;
-  s_window = state.window;
-  hold = state.hold;
-  bits = state.bits;
-  lcode = state.lencode;
-  dcode = state.distcode;
-  lmask = (1 << state.lenbits) - 1;
-  dmask = (1 << state.distbits) - 1;
-
+  const state = strm.state;
+  let _in = strm.next_in;                      /* local strm.input */
+  let _out = strm.next_out;                    /* local strm.output */
+  const last = _in + (strm.avail_in - 5);      /* have enough input while in < last */
+  const beg = _out - (start - strm.avail_out); /* inflate()'s initial strm.output */
+  const end = _out + (strm.avail_out - 257);   /* while out < end, enough space available */
+  const dmax = state.dmax;                     /* maximum distance from zlib header */
+  const wsize = state.wsize;                   /* window size or zero if not using window */
+  const whave = state.whave;                   /* valid bytes in the window */
+  const wnext = state.wnext;                   /* window write index */
+  const window = state.window;                 /* allocated sliding window, if wsize != 0 */
+  let hold = state.hold;                       /* local strm.hold */
+  let bits = state.bits;                       /* local strm.bits */
+  const lcode = state.lencode;                 /* local strm.lencode */
+  const dcode = state.distcode;                /* local strm.distcode */
+  const lmask = (1 << state.lenbits) - 1;      /* mask for first level of length codes */
+  const dmask = (1 << state.distbits) - 1;     /* mask for first level of distance codes */
 
   /* decode literals and length/distances until end-of-block or not enough
      input data or output space */
@@ -127,7 +102,7 @@ export default function inflate_fast(strm, start) {
       bits += 8;
     }
 
-    here = lcode[hold & lmask];
+    let here = lcode[hold & lmask]; /* retrieved table entry */
 
     dolen:
     for (;;) { // Goto emulation
@@ -181,13 +156,11 @@ export default function inflate_fast(strm, start) {
               }
             }
             dist += hold & ((1 << op) - 1);
-//#ifdef INFLATE_STRICT
             if (dist > dmax) {
               strm.msg = 'invalid distance too far back';
               state.mode = BAD;
               break top;
             }
-//#endif
             hold >>>= op;
             bits -= op;
             //Tracevv((stderr, "inflate:         distance %u\n", dist));
@@ -200,37 +173,15 @@ export default function inflate_fast(strm, start) {
                   state.mode = BAD;
                   break top;
                 }
-
-// (!) This block is disabled in zlib defaults,
-// don't enable it for binary compatibility
-//#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
-//                if (len <= op - whave) {
-//                  do {
-//                    output[_out++] = 0;
-//                  } while (--len);
-//                  continue top;
-//                }
-//                len -= op - whave;
-//                do {
-//                  output[_out++] = 0;
-//                } while (--op > whave);
-//                if (op === 0) {
-//                  from = _out - dist;
-//                  do {
-//                    output[_out++] = output[from++];
-//                  } while (--len);
-//                  continue top;
-//                }
-//#endif
               }
               from = 0; // window index
-              from_source = s_window;
+              from_source = window;
               if (wnext === 0) {           /* very common case */
                 from += wsize - op;
                 if (op < len) {         /* some from window */
                   len -= op;
                   do {
-                    output[_out++] = s_window[from++];
+                    output[_out++] = window[from++];
                   } while (--op);
                   from = _out - dist;  /* rest from output */
                   from_source = output;
@@ -242,14 +193,14 @@ export default function inflate_fast(strm, start) {
                 if (op < len) {         /* some from end of window */
                   len -= op;
                   do {
-                    output[_out++] = s_window[from++];
+                    output[_out++] = window[from++];
                   } while (--op);
                   from = 0;
                   if (wnext < len) {  /* some from start of window */
                     op = wnext;
                     len -= op;
                     do {
-                      output[_out++] = s_window[from++];
+                      output[_out++] = window[from++];
                     } while (--op);
                     from = _out - dist;      /* rest from output */
                     from_source = output;
@@ -261,7 +212,7 @@ export default function inflate_fast(strm, start) {
                 if (op < len) {         /* some from window */
                   len -= op;
                   do {
-                    output[_out++] = s_window[from++];
+                    output[_out++] = window[from++];
                   } while (--op);
                   from = _out - dist;  /* rest from output */
                   from_source = output;

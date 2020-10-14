@@ -1,5 +1,3 @@
-'use strict';
-
 // (C) 1995-2013 Jean-loup Gailly and Mark Adler
 // (C) 2014-2017 Vitaly Puzrin and Andrey Tupitsin
 //
@@ -18,6 +16,9 @@
 // 2. Altered source versions must be plainly marked as such, and must not be
 //   misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
+
+// This source file has been altered from its original version.
+// It has been translated to TypeScript.
 
 export default {
 
@@ -64,5 +65,5 @@ export default {
 
   /* The deflate compression method */
   Z_DEFLATED:               8
-  //Z_NULL:                 null // Use -1 or null inline, depending on var type
+  //Z_NULL:                 null // Use -1 or null inline, depending on const type
 };

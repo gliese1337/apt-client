@@ -33,7 +33,7 @@ export default function * inflate(buffer: Uint8Array): Generator<Uint8Array> {
 
   // Flag to properly process Z_BUF_ERROR on testing inflate call
   // when we check that all output data was flushed.
-  var allowBufError = false;
+  let allowBufError = false;
 
   let _mode = c.Z_NO_FLUSH;
 

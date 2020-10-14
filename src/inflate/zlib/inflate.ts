@@ -17,17 +17,23 @@
 //   misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
+// This source file has been altered from its original version.
+// It has been translated to TypeScript.
+
 import inflate_fast  from './inffast';
 import inflate_table from './inftrees';
+import { GZstate } from './gzstate';
+import ZStream from './zstream';
+import GZheader from './gzheader';
 
-function arraySet(dest, src, src_offs, len, dest_offs) {
+function arraySet(dest: Uint8Array, src: Uint8Array, src_offs: number, len: any, dest_offs: number) {
   dest.set(src.subarray(src_offs, src_offs + len), dest_offs);
 }
 
-function adler32(adler, buf, len, pos) {
-  var s1 = (adler & 0xffff) |0,
-      s2 = ((adler >>> 16) & 0xffff) |0,
-      n = 0;
+function adler32(adler: number, buf: Uint8Array, len: number, pos: number) {
+  let s1 = (adler & 0xffff) |0;
+  let s2 = ((adler >>> 16) & 0xffff) |0;
+  let n = 0;
 
   while (len !== 0) {
     // Set limit ~ twice less than 5552, to keep
@@ -49,11 +55,11 @@ function adler32(adler, buf, len, pos) {
 }
 
 function makeTable() {
-  var c, table = [];
+  const table: number[] = [];
 
-  for (var n = 0; n < 256; n++) {
-    c = n;
-    for (var k = 0; k < 8; k++) {
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
       c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
     }
     table[n] = c;
@@ -63,169 +69,106 @@ function makeTable() {
 }
 
 // Create table on load. Just 255 signed longs. Not a problem.
-var crcTable = makeTable();
+const crcTable = makeTable();
 
-function crc32(crc, buf, len, pos) {
-  var t = crcTable,
+function crc32(crc: number, buf: Uint8Array, len: number, pos: number) {
+  const t = crcTable,
       end = pos + len;
 
   crc ^= -1;
 
-  for (var i = pos; i < end; i++) {
+  for (let i = pos; i < end; i++) {
     crc = (crc >>> 8) ^ t[(crc ^ buf[i]) & 0xFF];
   }
 
   return (crc ^ (-1)); // >>> 0;
 }
 
-var CODES = 0;
-var LENS = 1;
-var DISTS = 2;
+const CODES = 0;
+const LENS = 1;
+const DISTS = 2;
 
 /* Public constants ==========================================================*/
 /* ===========================================================================*/
 
-
 /* Allowed flush values; see deflate() and inflate() below for details */
-//var Z_NO_FLUSH      = 0;
-//var Z_PARTIAL_FLUSH = 1;
-//var Z_SYNC_FLUSH    = 2;
-//var Z_FULL_FLUSH    = 3;
-var Z_FINISH        = 4;
-var Z_BLOCK         = 5;
-var Z_TREES         = 6;
+//const Z_NO_FLUSH      = 0;
+//const Z_PARTIAL_FLUSH = 1;
+//const Z_SYNC_FLUSH    = 2;
+//const Z_FULL_FLUSH    = 3;
+const Z_FINISH        = 4;
+const Z_BLOCK         = 5;
+const Z_TREES         = 6;
 
 
 /* Return codes for the compression/decompression functions. Negative values
  * are errors, positive values are used for special but normal events.
  */
-var Z_OK            = 0;
-var Z_STREAM_END    = 1;
-var Z_NEED_DICT     = 2;
-//var Z_ERRNO         = -1;
-var Z_STREAM_ERROR  = -2;
-var Z_DATA_ERROR    = -3;
-var Z_MEM_ERROR     = -4;
-var Z_BUF_ERROR     = -5;
-//var Z_VERSION_ERROR = -6;
+const Z_OK            = 0;
+const Z_STREAM_END    = 1;
+const Z_NEED_DICT     = 2;
+//const Z_ERRNO         = -1;
+const Z_STREAM_ERROR  = -2;
+const Z_DATA_ERROR    = -3;
+const Z_MEM_ERROR     = -4;
+const Z_BUF_ERROR     = -5;
+//const Z_VERSION_ERROR = -6;
 
 /* The deflate compression method */
-var Z_DEFLATED  = 8;
+const Z_DEFLATED  = 8;
 
 
 /* STATES ====================================================================*/
 /* ===========================================================================*/
 
-
-var    HEAD = 1;       /* i: waiting for magic header */
-var    FLAGS = 2;      /* i: waiting for method and flags (gzip) */
-var    TIME = 3;       /* i: waiting for modification time (gzip) */
-var    OS = 4;         /* i: waiting for extra flags and operating system (gzip) */
-var    EXLEN = 5;      /* i: waiting for extra length (gzip) */
-var    EXTRA = 6;      /* i: waiting for extra bytes (gzip) */
-var    NAME = 7;       /* i: waiting for end of file name (gzip) */
-var    COMMENT = 8;    /* i: waiting for end of comment (gzip) */
-var    HCRC = 9;       /* i: waiting for header crc (gzip) */
-var    DICTID = 10;    /* i: waiting for dictionary check value */
-var    DICT = 11;      /* waiting for inflateSetDictionary() call */
-var        TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
-var        TYPEDO = 13;    /* i: same, but skip check to exit inflate on new block */
-var        STORED = 14;    /* i: waiting for stored size (length and complement) */
-var        COPY_ = 15;     /* i/o: same as COPY below, but only first time in */
-var        COPY = 16;      /* i/o: waiting for input or output to copy stored block */
-var        TABLE = 17;     /* i: waiting for dynamic block table lengths */
-var        LENLENS = 18;   /* i: waiting for code length code lengths */
-var        CODELENS = 19;  /* i: waiting for length/lit and distance code lengths */
-var            LEN_ = 20;      /* i: same as LEN below, but only first time in */
-var            LEN = 21;       /* i: waiting for length/lit/eob code */
-var            LENEXT = 22;    /* i: waiting for length extra bits */
-var            DIST = 23;      /* i: waiting for distance code */
-var            DISTEXT = 24;   /* i: waiting for distance extra bits */
-var            MATCH = 25;     /* o: waiting for output space to copy string */
-var            LIT = 26;       /* o: waiting for output space to write literal */
-var    CHECK = 27;     /* i: waiting for 32-bit check value */
-var    LENGTH = 28;    /* i: waiting for 32-bit length (gzip) */
-var    DONE = 29;      /* finished check, done -- remain here until reset */
-var    BAD = 30;       /* got a data error -- remain here until reset */
-var    MEM = 31;       /* got an inflate() memory error -- remain here until reset */
-var    SYNC = 32;      /* looking for synchronization bytes to restart inflate() */
+const    HEAD = 1;       /* i: waiting for magic header */
+const    FLAGS = 2;      /* i: waiting for method and flags (gzip) */
+const    TIME = 3;       /* i: waiting for modification time (gzip) */
+const    OS = 4;         /* i: waiting for extra flags and operating system (gzip) */
+const    EXLEN = 5;      /* i: waiting for extra length (gzip) */
+const    EXTRA = 6;      /* i: waiting for extra bytes (gzip) */
+const    NAME = 7;       /* i: waiting for end of file name (gzip) */
+const    COMMENT = 8;    /* i: waiting for end of comment (gzip) */
+const    HCRC = 9;       /* i: waiting for header crc (gzip) */
+const    DICTID = 10;    /* i: waiting for dictionary check value */
+const    DICT = 11;      /* waiting for inflateSetDictionary() call */
+const    TYPE = 12;      /* i: waiting for type bits, including last-flag bit */
+const    TYPEDO = 13;    /* i: same, but skip check to exit inflate on new block */
+const    STORED = 14;    /* i: waiting for stored size (length and complement) */
+const    COPY_ = 15;     /* i/o: same as COPY below, but only first time in */
+const    COPY = 16;      /* i/o: waiting for input or output to copy stored block */
+const    TABLE = 17;     /* i: waiting for dynamic block table lengths */
+const    LENLENS = 18;   /* i: waiting for code length code lengths */
+const    CODELENS = 19;  /* i: waiting for length/lit and distance code lengths */
+const    LEN_ = 20;      /* i: same as LEN below, but only first time in */
+const    LEN = 21;       /* i: waiting for length/lit/eob code */
+const    LENEXT = 22;    /* i: waiting for length extra bits */
+const    DIST = 23;      /* i: waiting for distance code */
+const    DISTEXT = 24;   /* i: waiting for distance extra bits */
+const    MATCH = 25;     /* o: waiting for output space to copy string */
+const    LIT = 26;       /* o: waiting for output space to write literal */
+const    CHECK = 27;     /* i: waiting for 32-bit check value */
+const    LENGTH = 28;    /* i: waiting for 32-bit length (gzip) */
+const    DONE = 29;      /* finished check, done -- remain here until reset */
+const    BAD = 30;       /* got a data error -- remain here until reset */
+const    MEM = 31;       /* got an inflate() memory error -- remain here until reset */
+const    SYNC = 32;      /* looking for synchronization bytes to restart inflate() */
 
 /* ===========================================================================*/
 
-var ENOUGH_LENS = 852;
-var ENOUGH_DISTS = 592;
+const ENOUGH_LENS = 852;
+const ENOUGH_DISTS = 592;
 
-function zswap32(q) {
+function zswap32(q: number) {
   return  (((q >>> 24) & 0xff) +
           ((q >>> 8) & 0xff00) +
           ((q & 0xff00) << 8) +
           ((q & 0xff) << 24));
 }
 
-
-function InflateState() {
-  this.mode = 0;             /* current inflate mode */
-  this.last = false;          /* true if processing last block */
-  this.wrap = 0;              /* bit 0 true for zlib, bit 1 true for gzip */
-  this.havedict = false;      /* true if dictionary provided */
-  this.flags = 0;             /* gzip header method and flags (0 if zlib) */
-  this.dmax = 0;              /* zlib header max distance (INFLATE_STRICT) */
-  this.check = 0;             /* protected copy of check value */
-  this.total = 0;             /* protected copy of output count */
-  // TODO: may be {}
-  this.head = null;           /* where to save gzip header information */
-
-  /* sliding window */
-  this.wbits = 0;             /* log base 2 of requested window size */
-  this.wsize = 0;             /* window size or zero if not using window */
-  this.whave = 0;             /* valid bytes in the window */
-  this.wnext = 0;             /* window write index */
-  this.window = null;         /* allocated sliding window, if needed */
-
-  /* bit accumulator */
-  this.hold = 0;              /* input bit accumulator */
-  this.bits = 0;              /* number of bits in "in" */
-
-  /* for string and stored block copying */
-  this.length = 0;            /* literal or length of data to copy */
-  this.offset = 0;            /* distance back to copy string from */
-
-  /* for table and code decoding */
-  this.extra = 0;             /* extra bits needed */
-
-  /* fixed and dynamic code tables */
-  this.lencode = null;          /* starting table for length/literal codes */
-  this.distcode = null;         /* starting table for distance codes */
-  this.lenbits = 0;           /* index bits for lencode */
-  this.distbits = 0;          /* index bits for distcode */
-
-  /* dynamic table building */
-  this.ncode = 0;             /* number of code length code lengths */
-  this.nlen = 0;              /* number of length code lengths */
-  this.ndist = 0;             /* number of distance code lengths */
-  this.have = 0;              /* number of code lengths in lens[] */
-  this.next = null;              /* next available space in codes[] */
-
-  this.lens = new Uint16Array(320); /* temporary storage for code lengths */
-  this.work = new Uint16Array(288); /* work area for code table building */
-
-  /*
-   because we don't have pointers in js, we use lencode and distcode directly
-   as buffers so we don't need codes
-  */
-  //this.codes = new utils.Buf32(ENOUGH);       /* space for code tables */
-  this.lendyn = null;              /* dynamic table for length/literal codes (JS specific) */
-  this.distdyn = null;             /* dynamic table for distance codes (JS specific) */
-  this.sane = 0;                   /* if false, allow invalid distance too far */
-  this.back = 0;                   /* bits back of last unprocessed length/lit */
-  this.was = 0;                    /* initial length of match */
-}
-
-function inflateResetKeep(strm) {
-  var state;
-
+function inflateResetKeep(strm: ZStream) {
   if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  state = strm.state;
+  const state = strm.state;
   strm.total_in = strm.total_out = state.total = 0;
   strm.msg = ''; /*Z_NULL*/
   if (state.wrap) {       /* to support ill-conceived Java test suite */
@@ -242,17 +185,15 @@ function inflateResetKeep(strm) {
   state.lencode = state.lendyn = new Uint32Array(ENOUGH_LENS);
   state.distcode = state.distdyn = new Uint32Array(ENOUGH_DISTS);
 
-  state.sane = 1;
+  state.sane = true;
   state.back = -1;
   //Tracev((stderr, "inflate: reset\n"));
   return Z_OK;
 }
 
-function inflateReset(strm) {
-  var state;
-
+function inflateReset(strm: ZStream) {
   if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  state = strm.state;
+  const state = strm.state;
   state.wsize = 0;
   state.whave = 0;
   state.wnext = 0;
@@ -260,20 +201,17 @@ function inflateReset(strm) {
 
 }
 
-function inflateReset2(strm, windowBits) {
-  var wrap;
-  var state;
-
+function inflateReset2(strm: ZStream, windowBits: number) {
   /* get the state */
   if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  state = strm.state;
+  const state = strm.state;
 
   /* extract wrap request from windowBits parameter */
+  let wrap: number;
   if (windowBits < 0) {
     wrap = 0;
     windowBits = -windowBits;
-  }
-  else {
+  } else {
     wrap = (windowBits >> 4) + 1;
     if (windowBits < 48) {
       windowBits &= 15;
@@ -294,20 +232,17 @@ function inflateReset2(strm, windowBits) {
   return inflateReset(strm);
 }
 
-function inflateInit(strm, windowBits) {
-  var ret;
-  var state;
-
+function inflateInit(strm: ZStream, windowBits: number) {
   if (!strm) { return Z_STREAM_ERROR; }
   //strm.msg = Z_NULL;                 /* in case we return an error */
 
-  state = new InflateState();
+  const state = new GZstate();
 
   //if (state === Z_NULL) return Z_MEM_ERROR;
   //Tracev((stderr, "inflate: allocated\n"));
   strm.state = state;
   state.window = null/*Z_NULL*/;
-  ret = inflateReset2(strm, windowBits);
+  const ret = inflateReset2(strm, windowBits);
   if (ret !== Z_OK) {
     strm.state = null/*Z_NULL*/;
   }
@@ -325,20 +260,20 @@ function inflateInit(strm, windowBits) {
  used for threaded applications, since the rewriting of the tables and virgin
  may not be thread-safe.
  */
-var virgin = true;
+let virgin = true;
 
-var lenfix, distfix; // We have no pointers in JS, so keep tables separate
+// We have no pointers in JS, so keep tables separate
+let lenfix: Uint32Array;
+let distfix: Uint32Array; 
 
-function fixedtables(state) {
+function fixedtables(state: GZstate) {
   /* build fixed huffman tables if first call (may not be thread safe) */
   if (virgin) {
-    var sym;
-
     lenfix = new Uint32Array(512);
     distfix = new Uint32Array(32);
 
     /* literal/length table */
-    sym = 0;
+    let sym = 0;
     while (sym < 144) { state.lens[sym++] = 8; }
     while (sym < 256) { state.lens[sym++] = 9; }
     while (sym < 280) { state.lens[sym++] = 7; }
@@ -377,9 +312,8 @@ function fixedtables(state) {
  output will fall in the output data, making match copies simpler and faster.
  The advantage may be dependent on the size of the processor's data caches.
  */
-function updatewindow(strm, src, end, copy) {
-  var dist;
-  var state = strm.state;
+function updatewindow(strm: ZStream, src: Uint8Array, end: number, copy: number) {
+  const state = strm.state;
 
   /* if it hasn't been done already, allocate space for the window */
   if (state.window === null) {
@@ -397,7 +331,7 @@ function updatewindow(strm, src, end, copy) {
     state.whave = state.wsize;
   }
   else {
-    dist = state.wsize - state.wnext;
+    let dist = state.wsize - state.wnext;
     if (dist > copy) {
       dist = copy;
     }
@@ -419,30 +353,21 @@ function updatewindow(strm, src, end, copy) {
   return 0;
 }
 
-function inflate(strm, flush) {
-  var state;
-  var input, output;          // input/output buffers
-  var next;                   /* next input INDEX */
-  var put;                    /* next output INDEX */
-  var have, left;             /* available input and output */
-  var hold;                   /* bit buffer */
-  var bits;                   /* bits in bit buffer */
-  var _in, _out;              /* save starting available input and output */
-  var copy;                   /* number of stored or match bytes to copy */
-  var from;                   /* where to copy match bytes from */
-  var from_source;
-  var here = 0;               /* current decoding table entry */
-  var here_bits, here_op, here_val; // paked "here" denormalized (JS specific)
-  //var last;                   /* parent table entry */
-  var last_bits, last_op, last_val; // paked "last" denormalized (JS specific)
-  var len;                    /* length to copy for repeats, bits to drop */
-  var ret;                    /* return code */
-  var hbuf = new Uint8Array(4);    /* buffer for gzip header crc calculation */
-  var opts;
+function inflate(strm: ZStream, flush: number) {
+  let copy: number;                   /* number of stored or match bytes to copy */
+  let from: number;                   /* where to copy match bytes from */
+  let from_source: Uint8Array;
+  let here = 0;               /* current decoding table entry */
+  let here_bits: number, here_op: number, here_val: number; // paked "here" denormalized (JS specific)
+  //const last;                   /* parent table entry */
+  let last_bits: number, last_op: any, last_val: number; // paked "last" denormalized (JS specific)
+  let len: number;                    /* length to copy for repeats, bits to drop */     
+  const hbuf = new Uint8Array(4);    /* buffer for gzip header crc calculation */
+  let opts: { bits: any; };
 
-  var n; // temporary var for NEED_BITS
+  let n: number; // temporary var for NEED_BITS
 
-  var order = /* permutation of code lengths */
+  const order = /* permutation of code lengths */
     [ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 ];
 
 
@@ -451,24 +376,27 @@ function inflate(strm, flush) {
     return Z_STREAM_ERROR;
   }
 
-  state = strm.state;
+  const state = strm.state;
   if (state.mode === TYPE) { state.mode = TYPEDO; }    /* skip check */
 
 
   //--- LOAD() ---
-  put = strm.next_out;
-  output = strm.output;
-  left = strm.avail_out;
-  next = strm.next_in;
-  input = strm.input;
-  have = strm.avail_in;
-  hold = state.hold;
-  bits = state.bits;
+  let { input, output } = strm; // input/output buffers
+  let next = strm.next_in; /* next input INDEX */
+  let put = strm.next_out; /* next output INDEX */
+
+  /* available input and output */
+  let left = strm.avail_out;
+  let have = strm.avail_in;
+
+  let hold = state.hold; /* bit buffer */
+  let bits = state.bits; /* bits in bit buffer */
   //---
 
-  _in = have;
-  _out = left;
-  ret = Z_OK;
+  /* save starting available input and output */
+  let _in = have;
+  let _out = left;
+  let ret = Z_OK; /* return code */
 
   inf_leave: // goto emulation
   for (;;) {
@@ -667,7 +595,7 @@ function inflate(strm, flush) {
               len = state.head.extra_len - state.length;
               if (!state.head.extra) {
                 // Use untyped array for more convenient processing later
-                state.head.extra = new Array(state.head.extra_len);
+                state.head.extra = new Uint8Array(state.head.extra_len);
               }
               arraySet(
                 state.head.extra,
@@ -1329,14 +1257,11 @@ function inflate(strm, flush) {
           //---//
           state.back += state.extra;
         }
-//#ifdef INFLATE_STRICT
         if (state.offset > state.dmax) {
           strm.msg = 'invalid distance too far back';
           state.mode = BAD;
           break;
         }
-//#endif
-        //Tracevv((stderr, "inflate:         distance %u\n", state.offset));
         state.mode = MATCH;
         /* falls through */
       case MATCH:
@@ -1350,21 +1275,6 @@ function inflate(strm, flush) {
               state.mode = BAD;
               break;
             }
-// (!) This block is disabled in zlib defaults,
-// don't enable it for binary compatibility
-//#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
-//          Trace((stderr, "inflate.c too far\n"));
-//          copy -= state.whave;
-//          if (copy > state.length) { copy = state.length; }
-//          if (copy > left) { copy = left; }
-//          left -= copy;
-//          state.length -= copy;
-//          do {
-//            output[put++] = 0;
-//          } while (--copy);
-//          if (state.length === 0) { state.mode = LEN; }
-//          break;
-//#endif
           }
           if (copy > state.wnext) {
             copy -= state.wnext;
@@ -1511,12 +1421,10 @@ function inflate(strm, flush) {
   return ret;
 }
 
-function inflateGetHeader(strm, head) {
-  var state;
-
+function inflateGetHeader(strm: ZStream, head: GZheader) {
   /* check state */
   if (!strm || !strm.state) { return Z_STREAM_ERROR; }
-  state = strm.state;
+  const state = strm.state;
   if ((state.wrap & 2) === 0) { return Z_STREAM_ERROR; }
 
   /* save header structure */

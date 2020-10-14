@@ -244,7 +244,6 @@ function buf2string(buf: Uint8Array, len: number) {
     end = Math.min(len, start + stride);
     result += String.fromCharCode.apply(null, buf.subarray(start, end) as unknown as number[]);
   }
-
   return result;
 }
 

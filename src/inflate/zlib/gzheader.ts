@@ -1,5 +1,3 @@
-'use strict';
-
 // (C) 1995-2013 Jean-loup Gailly and Mark Adler
 // (C) 2014-2017 Vitaly Puzrin and Andrey Tupitsin
 //
@@ -19,38 +17,23 @@
 //   misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
-export default function GZheader(): void {
-  /* true if compressed data believed to be text */
-  this.text       = 0;
-  /* modification time */
-  this.time       = 0;
-  /* extra flags (not used when writing a gzip file) */
-  this.xflags     = 0;
-  /* operating system */
-  this.os         = 0;
-  /* pointer to extra field or Z_NULL if none */
-  this.extra      = null;
+// This source file has been altered from its original version.
+// It has been translated to TypeScript.
+
+export default class GZheader {
+  text      = 0; /* true if compressed data believed to be text */
+  time      = 0; /* modification time */
+  xflags    = 0; /* extra flags (not used when writing a gzip file) */
+  os        = 0; /* operating system */
+  extra: Uint8Array | null = null; /* pointer to extra field or Z_NULL if none */
+
   /* extra field length (valid if extra != Z_NULL) */
-  this.extra_len  = 0; // Actually, we don't need it in JS,
-                       // but leave for few code modifications
+  extra_len = 0; // Actually, we don't need it in JS,
+                 // but leave for few code modifications
 
-  //
-  // Setup limits is not necessary because in js we should not preallocate memory
-  // for inflate use constant limit in 65536 bytes
-  //
+  name      = ''; /* pointer to zero-terminated file name or Z_NULL */
+  comment   = ''; /* pointer to zero-terminated comment or Z_NULL */
 
-  /* space at extra (only when reading header) */
-  // this.extra_max  = 0;
-  /* pointer to zero-terminated file name or Z_NULL */
-  this.name       = '';
-  /* space at name (only when reading header) */
-  // this.name_max   = 0;
-  /* pointer to zero-terminated comment or Z_NULL */
-  this.comment    = '';
-  /* space at comment (only when reading header) */
-  // this.comm_max   = 0;
-  /* true if there was or will be a header crc */
-  this.hcrc       = 0;
-  /* true when done reading gzip header (not used when writing a gzip file) */
-  this.done       = false;
+  hcrc      = 0;  /* true if there was or will be a header crc */
+  done      = false; /* true when done reading gzip header (not used when writing a gzip file) */
 };

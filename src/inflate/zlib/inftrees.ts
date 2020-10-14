@@ -19,66 +19,60 @@
 //   misrepresented as being the original software.
 // 3. This notice may not be removed or altered from any source distribution.
 
-var MAXBITS = 15;
-var ENOUGH_LENS = 852;
-var ENOUGH_DISTS = 592;
-//var ENOUGH = (ENOUGH_LENS+ENOUGH_DISTS);
+const MAXBITS = 15;
+const ENOUGH_LENS = 852;
+const ENOUGH_DISTS = 592;
+//const ENOUGH = (ENOUGH_LENS+ENOUGH_DISTS);
 
-var CODES = 0;
-var LENS = 1;
-var DISTS = 2;
+const CODES = 0;
+const LENS = 1;
+const DISTS = 2;
 
-var lbase = [ /* Length codes 257..285 base */
+const lbase = [ /* Length codes 257..285 base */
   3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
   35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0
 ];
 
-var lext = [ /* Length codes 257..285 extra */
+const lext = [ /* Length codes 257..285 extra */
   16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18,
   19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21, 16, 72, 78
 ];
 
-var dbase = [ /* Distance codes 0..29 base */
+const dbase = [ /* Distance codes 0..29 base */
   1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
   257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
   8193, 12289, 16385, 24577, 0, 0
 ];
 
-var dext = [ /* Distance codes 0..29 extra */
+const dext = [ /* Distance codes 0..29 extra */
   16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22,
   23, 23, 24, 24, 25, 25, 26, 26, 27, 27,
   28, 28, 29, 29, 64, 64
 ];
 
-export default function inflate_table(type, lens, lens_index, codes, table, table_index, work, opts)
-{
-  var bits = opts.bits;
+export default function inflate_table(
+  type: number,
+  lens: Uint16Array,
+  lens_index: number,
+  codes: number,
+  table: number[] | Uint32Array,
+  table_index: number,
+  work: any[] | Uint16Array,
+  opts: { bits: any; },
+) {
+  const bits = opts.bits;
       //here = opts.here; /* table entry for duplication */
 
-  var len = 0;               /* a code's length in bits */
-  var sym = 0;               /* index of code symbols */
-  var min = 0, max = 0;          /* minimum and maximum code lengths */
-  var root = 0;              /* number of index bits for root table */
-  var curr = 0;              /* number of index bits for current table */
-  var drop = 0;              /* code bits to drop for sub-table */
-  var left = 0;                   /* number of prefix codes available */
-  var used = 0;              /* code entries in table used */
-  var huff = 0;              /* Huffman code */
-  var incr;              /* for incrementing code, index */
-  var fill;              /* index for replicating entries */
-  var low;               /* low bits for current root entry */
-  var mask;              /* mask for low root bits */
-  var next;             /* next available space in table */
-  var base = null;     /* base value table to use */
-  var base_index = 0;
-//  var shoextra;    /* extra bits table to use */
-  var end;                    /* use base and extra for symbol > end */
-  var count = new Uint16Array(MAXBITS + 1); //[MAXBITS+1];    /* number of codes of each length */
-  var offs = new Uint16Array(MAXBITS + 1); //[MAXBITS+1];     /* offsets in table for each length */
-  var extra = null;
-  var extra_index = 0;
-
-  var here_bits, here_op, here_val;
+  let len = 0;               /* a code's length in bits */
+  let sym = 0;               /* index of code symbols */
+  let min = 0, max = 0;          /* minimum and maximum code lengths */
+  let base = null;     /* base value table to use */
+  let base_index = 0;
+//  const shoextra;    /* extra bits table to use */
+  const count = new Uint16Array(MAXBITS + 1); //[MAXBITS+1];    /* number of codes of each length */
+  const offs = new Uint16Array(MAXBITS + 1); //[MAXBITS+1];     /* offsets in table for each length */
+  let extra = null;
+  let extra_index = 0;
 
   /*
    Process a set of code lengths to create a canonical Huffman code.  The
@@ -120,7 +114,7 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
   }
 
   /* bound code lengths, force root to be within code lengths */
-  root = bits;
+  let root = bits; /* number of index bits for root table */
   for (max = MAXBITS; max >= 1; max--) {
     if (count[max] !== 0) { break; }
   }
@@ -128,9 +122,9 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
     root = max;
   }
   if (max === 0) {                     /* no symbols to code at all */
-    //table.op[opts.table_index] = 64;  //here.op = (var char)64;    /* invalid code marker */
-    //table.bits[opts.table_index] = 1;   //here.bits = (var char)1;
-    //table.val[opts.table_index++] = 0;   //here.val = (var short)0;
+    //table.op[opts.table_index] = 64;  //here.op = (const char)64;    /* invalid code marker */
+    //table.bits[opts.table_index] = 1;   //here.bits = (const char)1;
+    //table.val[opts.table_index++] = 0;   //here.val = (const short)0;
     table[table_index++] = (1 << 24) | (64 << 16) | 0;
 
 
@@ -150,8 +144,8 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
   }
 
   /* check for an over-subscribed or incomplete set of lengths */
-  left = 1;
-  for (len = 1; len <= MAXBITS; len++) {
+  let left = 1; /* number of prefix codes available */
+  for (let len = 1; len <= MAXBITS; len++) {
     left <<= 1;
     left -= count[len];
     if (left < 0) {
@@ -209,6 +203,7 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
   /* set up for code type */
   // poor man optimization - use if-else instead of switch,
   // to avoid deopts in old v8
+  let end: number;          /* use base and extra for symbol > end */
   if (type === CODES) {
     base = extra = work;    /* dummy value--not used */
     end = 19;
@@ -227,15 +222,15 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
   }
 
   /* initialize opts for loop */
-  huff = 0;                   /* starting code */
+  let huff = 0;                   /* starting code */
   sym = 0;                    /* starting code symbol */
   len = min;                  /* starting code length */
-  next = table_index;              /* current table to fill in */
-  curr = root;                /* current table index bits */
-  drop = 0;                   /* current bits to drop from code for index */
-  low = -1;                   /* trigger new sub-table when len > root */
-  used = 1 << root;          /* use root table entries */
-  mask = used - 1;            /* mask for comparing low */
+  let next = table_index;              /* current table to fill in */
+  let curr = root;                /* current table index bits */
+  let drop = 0;                   /* current bits to drop from code for index */
+  let low = -1;                   /* trigger new sub-table when len > root */
+  let used = 1 << root;          /* use root table entries */
+  let mask = used - 1;            /* mask for comparing low */
 
   /* check available table space */
   if ((type === LENS && used > ENOUGH_LENS) ||
@@ -246,7 +241,9 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
   /* process all codes and make table entries */
   for (;;) {
     /* create table entry */
-    here_bits = len - drop;
+    const here_bits = len - drop;
+    let here_op: number;
+    let here_val: number;
     if (work[sym] < end) {
       here_op = 0;
       here_val = work[sym];
@@ -261,8 +258,8 @@ export default function inflate_table(type, lens, lens_index, codes, table, tabl
     }
 
     /* replicate for those indices with low len bits equal to huff */
-    incr = 1 << (len - drop);
-    fill = 1 << curr;
+    let incr = 1 << (len - drop);
+    let fill = 1 << curr;
     min = fill;                 /* save offset to next table */
     do {
       fill -= incr;
