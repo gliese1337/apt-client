@@ -128,7 +128,10 @@ function toContactInfo(s: string): ContactInfo {
   let match = s.match(/(.*)?<(.*?)>/);
   if (match) {
     const [ , name, email ] = s.match(/(.*)?<(.*?)>/) as string[];
-    return { name: name.replace(/"|^\s+|\s+$/g, '') , email: email.trim() };
+    return {
+      name: name ? name.replace(/"|^\s+|\s+$/g, '') : '' ,
+      email: email.trim(),
+    };
   }
 
   if(/^\s*\S+@\S+\s*$/.test(s)){
@@ -276,7 +279,7 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
       }
 
       if (state === 1) {
-        if(c === 10) {
+        if(c === 10 || c === 13) {
           out = 0;
           state = 0;
           continue;
@@ -291,7 +294,7 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
         }
       }
 
-      if(c === 10) { // found newline
+      if(c === 10 || c === 13) { // found newline
         if(out === 0) { // found blank line
           yield null;
           state = 0;
@@ -319,8 +322,48 @@ function * iterRecords(chunks: Iterable<Uint8Array>): Generator<[string, string]
   if (field) yield [field, buf2string(asciibuf, out)];
 }
 
-async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgVersionInfo[]) {
+function emptyBinPkg(RepoBase: string): BinPkgInfo {
+  return {
+    RepoBase,
+    type: 'bin',
+    Package: '',
+    Version: '',
+    Section: '',
+    Priority: 'optional',
+    Maintainer: { name: '', email: '' },
+
+    InstalledSize: 0,
+    Architecture: [],
+    Description: '',
+    Filename: '',
+    Size: 0,
+  };
+}
+
+function emptySrcPkg(RepoBase: string): SrcPkgInfo {
+  return {
+    RepoBase,
+    type: 'src',
+    Package: '',
+    Version: '',
+    Section: '',
+    Priority: 'optional',
+    Maintainer: { name: '', email: '' },
+
+    Binary: [],
+    Format: '',
+    Directory: '',
+
+    Files: [],
+    ChecksumsSha256: [],
+    ChecksumsSha1: [],
+  };
+}
+
+async function fetchAndParse(url: string, base: string, type: 'bin'|'src', pkgs: PkgVersionInfo[]) {
   let chunks: Iterable<Uint8Array>;
+
+  const new_pkg = type === 'bin' ? emptyBinPkg : emptySrcPkg;
 
   let res = await fetch(url);
   if (res.status === 200) {
@@ -333,12 +376,12 @@ async function fetchAndParse(url: string, base: string, type: string, pkgs: PkgV
     chunks = inflate(new Uint8Array(await res.arrayBuffer()));
   } else return false;
 
-  let pkg = { RepoBase: base, type } as PkgVersionInfo;
+  let pkg = new_pkg(base);
 
   for (const r of iterRecords(chunks)) {
     if (r === null) {
       if (pkg.Package) pkgs.push(pkg);
-      pkg = { RepoBase: base, type } as PkgVersionInfo;
+      pkg = new_pkg(base);
     } else {
       const key = r[0] as keyof PkgVersionInfo;
       const parser = pkgInfoValueParsers[key];
@@ -366,7 +409,8 @@ export async function readAptSource(spec: string, arch = 'all'): Promise<[PkgVer
         [ 'src', 'source', 'Sources' ];
       ps = components.split(/\s+/g).map(set => {
         const url = `${base}/dists/${dist}/${set}/${dir}/${fname}`;
-        return fetchAndParse(url, base, t, pkgs).then(s => s ? [] : [["Could not retrieve", url]]);
+        return fetchAndParse(url, base, t as 'bin'|'src', pkgs)
+          .then(s => s ? [] : [["Could not retrieve", url]]);
       });
       break cases;
     }
@@ -375,7 +419,8 @@ export async function readAptSource(spec: string, arch = 'all'): Promise<[PkgVer
     if (match) {
       const [, base, , fname ] = match;
       const t = 'Sources' === fname ? 'src' : 'bin';
-      ps = [fetchAndParse(spec, base, t, pkgs).then(s => s ? [] : [["Could not retrieve", spec]])];
+      ps = [fetchAndParse(spec, base, t, pkgs)
+        .then(s => s ? [] : [["Could not retrieve", spec]])];
       break cases;
     }
 

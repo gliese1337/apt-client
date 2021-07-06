@@ -33,7 +33,7 @@ Data guaranteed to be available on all package version info objects includes:
 * `Package: string` The package name
 * `RepoBase: string` The URL to the repository from which this information was obtained.
 * `Version: string` The version of the package being described.
-* `Maintainer: { name: string, email: string}` Contact information for the package maintainer.
+* `Maintainer: { name: string, email: string }` Contact information for the package maintainer. (Note that while the object is guaranteed to be present, the name, email, or both may be empty strings.)
 
 Additional data guaranteed to be available on all version objects for binary packages includes:
 * `Architecture: string[]` A list of architectures for which binaries are available.
